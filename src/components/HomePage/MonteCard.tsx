@@ -13,11 +13,6 @@ function extrairTodosProdutosDoMonte(
   monte: MonteComEmpilhados
 ): ProdutoFormatado[] {
   const produtos = [...monte.produtos];
-  if (monte.empilhados?.length) {
-    for (const empilhado of monte.empilhados) {
-      produtos.push(...extrairTodosProdutosDoMonte(empilhado));
-    }
-  }
   return produtos;
 }
 
