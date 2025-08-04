@@ -1141,6 +1141,7 @@ function tentarSobreposicaoFinal(
   }  
   return {montesAlocados, montesNaoAlocados: montesAindaNaoAlocados};
 }
+return {montesAlocados: [], montesNaoAlocados: []}
 }
 
 export function distribuirProdutos(

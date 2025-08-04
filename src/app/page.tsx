@@ -56,20 +56,20 @@ export default function CarregamentoPage() {
     });
   };
 
-  useEffect(() => {
-    const produtosFormatados = fullProducts as ProdutoFormatado[];
-    const {compartimentos, montesAlocados, montesNaoAlocados} =
-      distribuirProdutos(produtosFormatados);
-    compartimentos.forEach((comp) => organizarMontesPorEmpilhamento(comp));
-    setCompartimentoComProdutos(compartimentos);
-    setMontesNaoAlocados(montesNaoAlocados);
-    const resumo = gerarResumo(
-      produtosFormatados,
-      montesAlocados,
-      montesNaoAlocados
-    ) as Resumo;
-    setResumo(resumo);
-  }, []);
+  // useEffect(() => {
+  //   const produtosFormatados = fullProducts as ProdutoFormatado[];
+  //   const {compartimentos, montesAlocados, montesNaoAlocados} =
+  //     distribuirProdutos(produtosFormatados);
+  //   compartimentos.forEach((comp) => organizarMontesPorEmpilhamento(comp));
+  //   setCompartimentoComProdutos(compartimentos);
+  //   setMontesNaoAlocados(montesNaoAlocados);
+  //   const resumo = gerarResumo(
+  //     produtosFormatados,
+  //     montesAlocados,
+  //     montesNaoAlocados
+  //   ) as Resumo;
+  //   setResumo(resumo);
+  // }, []);
 
   return (
     <div className="p-6 space-y-6">
