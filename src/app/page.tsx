@@ -1,17 +1,16 @@
 "use client";
 
-import {useEffect, useRef, useState} from "react";
+import {useRef, useState} from "react";
 import {Input} from "@/components/ui/input";
 import {Button} from "@/components/ui/button";
 import {Send} from "lucide-react";
 import {readCsvFile} from "@/utils/readCsvFile";
 import {formatarProdutos} from "@/utils/formatarProdutos";
 import {distribuirProdutos} from "@/utils/distribuicaoLogistica";
-import fullProducts from "@/mock/fullProducts.json";
 import {cn} from "@/lib/utils";
 
 // import firstClientMock from "@/mock/firstClientMock.json";
-import {Monte, ProdutoFormatado, Resumo} from "@/types/Produto";
+import {Monte, Resumo} from "@/types/Produto";
 import {Compartimento} from "@/types/Compartimento";
 import {gerarResumo} from "@/utils/gerarResumo";
 import {MontesNaoAlocadosCard} from "@/components/HomePage/MonteNaoAlocadoCard";
