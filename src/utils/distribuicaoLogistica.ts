@@ -1,6 +1,7 @@
 import {Compartimento, LadoCompartimento} from "@/types/Compartimento";
 import {AgrupadoPorCliente, Monte, ProdutoFormatado} from "@/types/Produto";
 import {v4 as uuidv4} from "uuid";
+import { tentarAlocarComPreferencias } from "./validacaoPreferencias";
 
 const maxPorMonte = 30;
 
@@ -1230,11 +1231,22 @@ export function distribuirProdutos(
   for (let i = 0; i < produtosAgrupadosPorCliente.length; i++) {
     const clienteUnico = produtosAgrupadosPorCliente[i];    
     const montesDeUmCliente = gerarMontes(clienteUnico.produtos);    
-    distribuirMontesNosCavaletes(montesDeUmCliente, compartimentos);    
-    const montesAlocadosCliente = montesDeUmCliente.filter((monte) => monte.alocado);
-    const montesNaoAlocadosCliente = montesDeUmCliente.filter((monte) => !monte.alocado);
-    montesAlocados.push(...montesAlocadosCliente)
-    montesNaoAlocados.push(...montesNaoAlocadosCliente);
+    
+    // Primeiro, tentar alocar com preferências
+    const resultadoAlocacao = tentarAlocarComPreferencias(montesDeUmCliente, compartimentos, clienteUnico.idCliente);
+    
+    // Se ainda há montes não alocados, tentar alocação normal
+    if (resultadoAlocacao.montesNaoAlocados.length > 0) {
+      distribuirMontesNosCavaletes(resultadoAlocacao.montesNaoAlocados, compartimentos);
+      
+      const montesAlocadosNormal = resultadoAlocacao.montesNaoAlocados.filter((monte) => monte.alocado);
+      const montesNaoAlocadosNormal = resultadoAlocacao.montesNaoAlocados.filter((monte) => !monte.alocado);
+      
+      montesAlocados.push(...resultadoAlocacao.montesAlocados, ...montesAlocadosNormal);
+      montesNaoAlocados.push(...montesNaoAlocadosNormal);
+    } else {
+      montesAlocados.push(...resultadoAlocacao.montesAlocados);
+    }
   }  
   if (montesNaoAlocados.length > 0) {
     const resultadoSobreposicao = tentarSobreposicaoFinal(montesNaoAlocados, compartimentos);    

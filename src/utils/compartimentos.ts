@@ -61,8 +61,8 @@ export const compartimentos: Compartimento[] = [
     pesoTotal: 0,
   },
   {
-    id: "malhau",
-    tipo: "malhau",
+    id: "malhal",
+    tipo: "malhal",
     orientacao: "horizontal",
     altura: 2450,
     lados: {

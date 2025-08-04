@@ -8,7 +8,7 @@ export interface LadoCompartimento {
 
 export interface Compartimento {
   id: string;
-  tipo: "cavalete" | "malhau";
+  tipo: "cavalete" | "malhal";
   orientacao: "horizontal" | "vertical";
   altura: number;
   lados: {
