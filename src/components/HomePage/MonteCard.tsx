@@ -7,6 +7,7 @@ import {cn} from "@/lib/utils";
 
 interface MonteComEmpilhados extends Monte {
   empilhados?: MonteComEmpilhados[];
+  isSobreposto?: boolean;
 }
 
 function extrairTodosProdutosDoMonte(
@@ -72,7 +73,7 @@ export const MonteCard = ({
     >
       <div className="flex items-center justify-between">
         <div className="font-medium">Monte</div>
-        {monte.monteBase ? (
+        {monte.monteBase || monte.isSobreposto ? (
           <span className="text-xs text-white bg-green-500 px-2 py-0.5 rounded-full">
             Sobreposto
           </span>

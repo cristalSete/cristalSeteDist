@@ -3,11 +3,12 @@
 import {useRef, useState} from "react";
 import {Input} from "@/components/ui/input";
 import {Button} from "@/components/ui/button";
-import {Send} from "lucide-react";
+import {Send, Copy, CheckCircle} from "lucide-react";
 import {readCsvFile} from "@/utils/readCsvFile";
 import {formatarProdutos} from "@/utils/formatarProdutos";
 import {distribuirProdutos} from "@/utils/distribuicaoLogistica";
 import {cn} from "@/lib/utils";
+import {limparReferenciaCircular} from "@/utils/limparReferenciaCircular";
 
 // import firstClientMock from "@/mock/firstClientMock.json";
 import {Monte, Resumo} from "@/types/Produto";
@@ -25,6 +26,10 @@ export default function CarregamentoPage() {
   >(null);
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [montesNaoAlocados, setMontesNaoAlocados] = useState<Monte[]>([]);
+  const [linkCompartilhado, setLinkCompartilhado] = useState<string | null>(null);
+  const [compartihandoMapa, setCompartilhandoMapa] = useState(false);
+  const [linkCopiado, setLinkCopiado] = useState(false);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -45,6 +50,9 @@ export default function CarregamentoPage() {
         montesNaoAlocados
       ) as Resumo;
       setResumo(resumo);
+      // Limpar link anterior quando novo arquivo é carregado
+      setLinkCompartilhado(null);
+      setLinkCopiado(false);
       // console.log("resumo", resumo);
       // const distributedProducts = distributeProductsWithRules(productsRaw);
       // console.log("produtosDistribuidos", produtosDistribuidos);
@@ -53,6 +61,57 @@ export default function CarregamentoPage() {
       // console.log("resultadooo", resultado);
       // setResumo(resultado);
     });
+  };
+
+  const handleCompartilharMapa = async () => {
+    if (!resumo || !compartimentoComProdutos) {
+      alert('Nenhum dados para compartilhar. Por favor, carregue um arquivo CSV primeiro.');
+      return;
+    }
+
+    setCompartilhandoMapa(true);
+    
+    try {
+      // Limpar referências circulares antes de enviar
+      const dadosLimpos = limparReferenciaCircular({
+        resumo,
+        compartimentos: compartimentoComProdutos,
+        montesNaoAlocados,
+        fileName: fileName || undefined,
+      });
+
+      const response = await fetch('/api/compartilhar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dadosLimpos),
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao compartilhar o mapa');
+      }
+
+      const data = await response.json();
+      setLinkCompartilhado(data.url);
+    } catch (error) {
+      console.error('Erro ao compartilhar:', error);
+      alert('Erro ao compartilhar o mapa. Tente novamente.');
+    } finally {
+      setCompartilhandoMapa(false);
+    }
+  };
+
+  const copiarLink = async () => {
+    if (linkCompartilhado) {
+      try {
+        await navigator.clipboard.writeText(linkCompartilhado);
+        setLinkCopiado(true);
+        setTimeout(() => setLinkCopiado(false), 2000);
+      } catch (error) {
+        console.error('Erro ao copiar link:', error);
+      }
+    }
   };
 
   // useEffect(() => {
@@ -77,13 +136,13 @@ export default function CarregamentoPage() {
           🚛 Sistema de Organização de Carga - Cristal Sete
         </h1>
         <Button
-          disabled
+          disabled={!resumo || !compartimentoComProdutos || compartihandoMapa}
           variant="outline"
-          onClick={() => console.log(compartimentoComProdutos)}
+          onClick={handleCompartilharMapa}
           className="cursor-pointer"
         >
-          <Send className="w-4 h-4 mr-0" />
-          Exportar Mapa
+          <Send className="w-4 h-4 mr-2" />
+          {compartihandoMapa ? 'Compartilhando...' : 'Compartilhar Mapa'}
         </Button>
       </div>
 
@@ -100,6 +159,42 @@ export default function CarregamentoPage() {
           </p>
         )}
       </div>
+
+      {linkCompartilhado && (
+        <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+          <h3 className="font-semibold text-green-800 mb-2">🎉 Mapa compartilhado com sucesso!</h3>
+          <div className="flex items-center gap-2">
+            <input 
+              type="text" 
+              value={linkCompartilhado} 
+              readOnly 
+              className="flex-1 p-2 border rounded bg-white text-sm"
+            />
+            <Button 
+              onClick={copiarLink}
+              variant="outline"
+              size="sm"
+              className="whitespace-nowrap"
+            >
+              {linkCopiado ? (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Copiado!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 mr-1" />
+                  Copiar
+                </>
+              )}
+            </Button>
+          </div>
+          <p className="text-sm text-green-600 mt-2">
+            Compartilhe este link para que outros possam visualizar o mapa de carga.
+          </p>
+        </div>
+      )}
+
       {resumo && (
         <div className="grid w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4 items-stretch">
           <div className="flex h-full flex-col gap-1 p-6 items-center justify-center rounded-md bg-blue-200 text-center">
