@@ -13,13 +13,22 @@ function limparMonte(monte: unknown): unknown {
   if (!monte || typeof monte !== 'object') return monte;
   
   const monteLimpo = { ...(monte as Record<string, unknown>) };
-  // Remove as referências circulares
+  
+  // Preserva a informação se é sobreposto antes de remover a referência circular
+  const temMonteBase = Boolean(monteLimpo.monteBase);
+  monteLimpo.isSobreposto = temMonteBase;
+  
+  // Remove a referência circular monteBase
   delete monteLimpo.monteBase;
-  delete monteLimpo.empilhados;
   
   // Limpa os produtos dentro do monte
   if (monteLimpo.produtos && Array.isArray(monteLimpo.produtos)) {
     monteLimpo.produtos = monteLimpo.produtos.map(limparProduto);
+  }
+
+  // Processa recursivamente os montes empilhados
+  if (monteLimpo.empilhados && Array.isArray(monteLimpo.empilhados)) {
+    monteLimpo.empilhados = monteLimpo.empilhados.map(limparMonte);
   }
   
   return monteLimpo;
