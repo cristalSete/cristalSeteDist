@@ -23,24 +23,25 @@ export enum TipoVidro {
 
 export function pegarTipoVidro(produto: string): TipoVidro {
   const nome = produto.toLowerCase();
-
+  
+  if (nome.includes(TipoVidro.espelho.toLowerCase())) return TipoVidro.espelho;
+  if (nome.includes(TipoVidro.tm1ref.toLowerCase())) return TipoVidro.tm1ref;
+  if (nome.includes(TipoVidro.tm2ref.toLowerCase())) return TipoVidro.tm2ref;
+  if (nome.includes(TipoVidro.tm3ref.toLowerCase())) return TipoVidro.tm3ref;
+  if (nome.includes(TipoVidro.tm4ref.toLowerCase())) return TipoVidro.tm4ref;
+  if (nome.includes(TipoVidro.tm5escd.toLowerCase())) return TipoVidro.tm5escd;
+  if (nome.includes(TipoVidro.tm1.toLowerCase())) return TipoVidro.tm1;
+  if (nome.includes(TipoVidro.tm2.toLowerCase())) return TipoVidro.tm2;
+  if (nome.includes(TipoVidro.tm3.toLowerCase())) return TipoVidro.tm3;
+  if (nome.includes(TipoVidro.tm4.toLowerCase())) return TipoVidro.tm4;
+  if (nome.includes(TipoVidro.tm.toLowerCase())) return TipoVidro.tm;
   if (nome.includes(TipoVidro.pvb.toLowerCase())) return TipoVidro.pvb;
   if (nome.includes(TipoVidro.vidroTemperado.toLowerCase())) return TipoVidro.vidroTemperado;
   if (nome.includes(TipoVidro.laminadoComum.toLowerCase())) return TipoVidro.laminadoComum;
   if (nome.includes(TipoVidro.molde.toLowerCase())) return TipoVidro.molde;
   if (nome.includes(TipoVidro.ecoGlass.toLowerCase())) return TipoVidro.ecoGlass;
   if (nome.includes(TipoVidro.laminadoTemperado.toLowerCase())) return TipoVidro.laminadoTemperado;
-  if (nome.includes(TipoVidro.espelho.toLowerCase())) return TipoVidro.espelho;
-  if (nome.includes(TipoVidro.tm.toLowerCase())) return TipoVidro.tm;
-  if (nome.includes(TipoVidro.tm1.toLowerCase())) return TipoVidro.tm1;
-  if (nome.includes(TipoVidro.tm2.toLowerCase())) return TipoVidro.tm2;
-  if (nome.includes(TipoVidro.tm3.toLowerCase())) return TipoVidro.tm3;
-  if (nome.includes(TipoVidro.tm4.toLowerCase())) return TipoVidro.tm4;
-  if (nome.includes(TipoVidro.tm1ref.toLowerCase())) return TipoVidro.tm1ref;
-  if (nome.includes(TipoVidro.tm2ref.toLowerCase())) return TipoVidro.tm2ref;
-  if (nome.includes(TipoVidro.tm3ref.toLowerCase())) return TipoVidro.tm3ref;
-  if (nome.includes(TipoVidro.tm4ref.toLowerCase())) return TipoVidro.tm4ref;
-  if (nome.includes(TipoVidro.tm5escd.toLowerCase())) return TipoVidro.tm5escd;
+  
   return TipoVidro.vidroTemperado;
 }
 
