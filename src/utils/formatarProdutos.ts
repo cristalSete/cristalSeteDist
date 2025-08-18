@@ -16,7 +16,9 @@ export enum TipoVidro {
   tm2ref = "TM2REF",
   tm3ref = "TM3REF",
   tm4ref = "TM4REF",
-  tm5escd = "TM5ESCD"
+  tm5escd = "TM5ESCD",
+  espelho = "Espelho"
+
 }
 
 export function pegarTipoVidro(produto: string): TipoVidro {
@@ -28,6 +30,7 @@ export function pegarTipoVidro(produto: string): TipoVidro {
   if (nome.includes(TipoVidro.molde.toLowerCase())) return TipoVidro.molde;
   if (nome.includes(TipoVidro.ecoGlass.toLowerCase())) return TipoVidro.ecoGlass;
   if (nome.includes(TipoVidro.laminadoTemperado.toLowerCase())) return TipoVidro.laminadoTemperado;
+  if (nome.includes(TipoVidro.espelho.toLowerCase())) return TipoVidro.espelho;
   if (nome.includes(TipoVidro.tm.toLowerCase())) return TipoVidro.tm;
   if (nome.includes(TipoVidro.tm1.toLowerCase())) return TipoVidro.tm1;
   if (nome.includes(TipoVidro.tm2.toLowerCase())) return TipoVidro.tm2;
@@ -106,7 +109,7 @@ function extrairIdENomeCliente(cliente: string): { id: string; nome: string } {
 export function pegarInformacoesProduto(
   data: CsvProduto[]
 ): ProdutoFormatado[] {
-  const tiposEspeciais = [TipoVidro.ecoGlass, TipoVidro.molde, TipoVidro.pvb, TipoVidro.laminadoComum, TipoVidro.laminadoTemperado];
+  const tiposEspeciais = [TipoVidro.ecoGlass, TipoVidro.molde, TipoVidro.pvb, TipoVidro.laminadoComum, TipoVidro.laminadoTemperado, TipoVidro.espelho];
 
   return data.flatMap((item) => {
     item.Produto += " " + (item["Produto Descrição"] || item["Tipo Produto Descrição"]);
@@ -119,14 +122,18 @@ export function pegarInformacoesProduto(
     const precisaDeitado = precisaDeitar(altura, largura, tipo);
     if(precisaDeitado) {
       const larguraAntiga = largura;
-      largura = altura;
-      altura = larguraAntiga;
+      largura = Math.max(altura, largura);
+      altura = Math.min(altura, larguraAntiga);
     }else{
       const alturaAntiga = altura;
       altura = Math.max(altura, largura);
       largura = Math.min(alturaAntiga, largura);
     }
     const especial = tiposEspeciais.includes(tipo);
+
+    if(largura === 0 || altura === 0) {
+      return [];
+    }
 
     return Array.from({length: quantidade}, () => ({
       id,

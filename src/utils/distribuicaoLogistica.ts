@@ -5,6 +5,47 @@ import { tentarAlocarComPreferencias } from "./validacaoPreferencias";
 
 const maxPorMonte = 30;
 
+/**
+ * Obtém o id da raiz da cadeia (monte base sem monteBase) de um monte.
+ */
+function obterIdRaizDaCadeia(monte: Monte): string {
+  let atual: Monte | undefined = monte;
+  while (atual?.monteBase) {
+    atual = atual.monteBase;
+  }
+  return atual?.id ?? monte.id;
+}
+
+/**
+ * Dado um lado e o id da raiz, encontra o topo atual da cadeia (último sobreposto).
+ */
+function obterTopoDaCadeia(lado: LadoCompartimento, raizId: string): Monte | null {
+  let atual = lado.montes.find(m => m.id === raizId) || null;
+  if (!atual) return null;
+  while (true) {
+    const proximo = lado.montes.find(m => m.monteBase?.id === atual!.id);
+    if (!proximo) break;
+    atual = proximo;
+  }
+  return atual;
+}
+
+/**
+ * Ordena os lados do compartimento priorizando o equilíbrio de carregamento.
+ * Para o cavalete_3 (vertical), dá preferência ao lado com menor peso e maior espaço restante.
+ */
+function ladosBalanceados(compartimento: Compartimento): Array<["frente"|"tras"|"meio", LadoCompartimento]> {
+  const entradas = Object.entries(compartimento.lados) as Array<["frente"|"tras"|"meio", LadoCompartimento]>;
+  if (compartimento.id !== "cavalete_3") return entradas;
+  const pesoDoLado = (lado: LadoCompartimento) => lado.montes.reduce((s, m) => s + m.peso, 0);
+  return [...entradas].sort((a, b) => {
+    const [, la] = a; const [, lb] = b;
+    const pa = pesoDoLado(la); const pb = pesoDoLado(lb);
+    if (pa !== pb) return pa - pb; // menor peso primeiro
+    return lb.larguraRestante - la.larguraRestante; // mais espaço primeiro
+  });
+}
+
 export function agruparProdutosPorCliente(
   produtos: ProdutoFormatado[]
 ): AgrupadoPorCliente[] {
@@ -433,9 +474,24 @@ function encontrarMelhorCombinacaoMontes(
   montesExistentes: Monte[],
   lado: LadoCompartimento,
   maximoDeItens: number,
-  maxCombinacoes: number = 10
+  maxCombinacoes: number = 10,
+  compartimento?: Compartimento
 ): Monte[] | null {
-  const montesOrdenados = [...montesExistentes].sort((a, b) => b.largura - a.largura);  
+  // Se já existe uma cadeia ativa, NÃO permitir criar nova sobreposição múltipla
+  if (lado.cadeiaAlvoId) {
+    return null;
+  }
+  
+  // Filtrar montes que não podem mais ser sobrepostos
+  const montesDisponiveis = montesExistentes.filter(m => 
+    !(m as Monte & { naoPodeSerSobreposto?: boolean }).naoPodeSerSobreposto
+  );
+  
+  if (montesDisponiveis.length < 2) {
+    return null;
+  }
+  
+  const montesOrdenados = [...montesDisponiveis].sort((a, b) => b.largura - a.largura);  
   const estadoOriginal = {
     produtos: monteNovo.produtos.map(produto => ({
       ...produto,
@@ -449,7 +505,7 @@ function encontrarMelhorCombinacaoMontes(
   for (let tamanho = 2; tamanho <= Math.min(maxCombinacoes, montesOrdenados.length); tamanho++) {
     const combinacoes = gerarCombinacoes(montesOrdenados, tamanho);    
     for (const combinacao of combinacoes) {
-      if (verificarSePodeSobreporMultiplos(monteNovo, combinacao, lado, 60)) {
+      if (verificarSePodeSobreporMultiplos(monteNovo, combinacao, lado, 60, compartimento)) {
         return combinacao;
       }      
       restaurarEstadoMonte(monteNovo, estadoOriginal);
@@ -462,7 +518,8 @@ function verificarSePodeSobreporMultiplos(
   monteNovo: Monte,
   montesExistentes: Monte[],
   lado: LadoCompartimento,
-  maximoDeItens: number
+  maximoDeItens: number,
+  compartimento?: Compartimento
 ): boolean {
   if (montesExistentes.length === 0) {
     return false;
@@ -476,6 +533,11 @@ function verificarSePodeSobreporMultiplos(
       lado.montes.filter((monte) => monte.monteBase?.id === monteExistente.id)
         .length > 0
     ) {
+      return false;
+    }
+    
+    // Verificar se o monte existente não pode mais ser sobreposto
+    if ((monteExistente as Monte & { naoPodeSerSobreposto?: boolean }).naoPodeSerSobreposto) {
       return false;
     }
     
@@ -512,10 +574,30 @@ function verificarSePodeSobreporMultiplos(
     largura: monteNovo.largura
   };
 
-  if (monteNovo.largura > larguraTotalMontesExistentes) {
-    restaurarEstadoMonte(monteNovo, estadoOriginal);
-    return false;
+  // Lógica especial para sobreposição múltipla no cavalete_3
+  if (compartimento && compartimento.id === "cavalete_3") {
+    // Se já existe uma cadeia de sobreposição múltipla, usar largura máxima do cavalete
+    if (lado.cadeiaAlvoId) {
+      const larguraTotalCavalete = 3800;
+      if (monteNovo.largura > larguraTotalCavalete) {
+        restaurarEstadoMonte(monteNovo, estadoOriginal);
+        return false;
+      }
+    } else {
+      // Primeira sobreposição múltipla: usar regra original (soma das larguras)
+      if (monteNovo.largura > larguraTotalMontesExistentes) {
+        restaurarEstadoMonte(monteNovo, estadoOriginal);
+        return false;
+      }
+    }
+  } else {
+    // Para outros compartimentos, manter a regra original
+    if (monteNovo.largura > larguraTotalMontesExistentes) {
+      restaurarEstadoMonte(monteNovo, estadoOriginal);
+      return false;
+    }
   }
+  
   const todosEspeciais = montesExistentes.every(monte => monte.especial);
   const temPVBNosMontesExistentes = montesExistentes.some(monte => 
     monte.produtos.some(produto => produto.tipo === "PVB")
@@ -538,6 +620,8 @@ function verificarSePodeSobreporMultiplos(
   return true;
 }
 
+
+
 function verificarSePodeSobrepor(
   monteNovo: Monte,
   monteExistente: Monte & {empilhados?: Monte[]},
@@ -548,6 +632,11 @@ function verificarSePodeSobrepor(
     lado.montes.filter((monte) => monte.monteBase?.id === monteExistente.id)
       .length > 0
   ) {
+    return false;
+  }
+  
+  // Verificar se o monte existente não pode mais ser sobreposto
+  if ((monteExistente as Monte & { naoPodeSerSobreposto?: boolean }).naoPodeSerSobreposto) {
     return false;
   }
   
@@ -571,7 +660,12 @@ function verificarSePodeSobrepor(
     largura: monteNovo.largura
   };  
   let larguraOk = true;
-  if (monteNovo.largura > monteExistente.largura) {
+  // Em sobreposição simples, normalmente não permitimos monte mais largo sobre mais estreito.
+  // Porém, se já existe uma cadeia de sobreposição múltipla neste lado, liberamos essa restrição
+  // para permitir continuidade da cadeia com montes mais largos.
+  const ladoDoMonteExistente = lado; // clareza sem alterar semântica
+  const existeCadeiaMultiplaAtiva = Boolean(ladoDoMonteExistente.cadeiaAlvoId);
+  if (!existeCadeiaMultiplaAtiva && monteNovo.largura > monteExistente.largura) {
     larguraOk = false;
   }
   const produtosContadosNoMonte = contarProdutosNosMontes(monteExistente);
@@ -780,30 +874,53 @@ function sobreporMultiplos(
   compartimentosOrdenados: Compartimento[]
 ): Compartimento | null {
   for (const compartimento of compartimentosOrdenados) {
-    const lados = Object.entries(compartimento.lados);
+    const lados = ladosBalanceados(compartimento);
     for (const [ladoNome, lado] of lados) {
-      if (lado.montes.length >= 2) {
-        const melhorCombinacao = encontrarMelhorCombinacaoMontes(
-          monte, 
-          lado.montes, 
-          lado, 
-          60,
-          10
-        );
-        if (melhorCombinacao) {
-          monte.monteBase = melhorCombinacao[0];
+      if (lado.montes.length < 1) continue;
+
+      // Se já existe uma cadeia definida neste lado, tentar continuar nela
+      if (lado.cadeiaAlvoId) {
+        const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
+        if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, 60)) {
+          monte.monteBase = topo;
           lado.montes.push(monte);
           monte.alocado = true;
           compartimento.pesoTotal += monte.peso;
-          if (ladoNome === "frente") {
-            compartimento.lados.frente = lado;
+          if (ladoNome === "frente") compartimento.lados.frente = lado;
+          if (ladoNome === "tras") compartimento.lados.tras = lado;
+          if (ladoNome === "meio") compartimento.lados.meio = lado;
+          return compartimento;
+        }
+      }
+
+      // Não há cadeia ainda: criar a primeira cadeia via sobreposição múltipla
+      if (lado.montes.length >= 2) {
+        const melhorCombinacao = encontrarMelhorCombinacaoMontes(
+          monte,
+          lado.montes,
+          lado,
+          60,
+          10,
+          compartimento
+        );
+        if (melhorCombinacao) {
+          // Escolher como raiz da cadeia o monte com maior quantidade de produtos
+          let escolhido = melhorCombinacao[0];
+          let maiorQtd = contarProdutosNosMontes(escolhido);
+          for (const m of melhorCombinacao) {
+            const qtd = contarProdutosNosMontes(m);
+            if (qtd > maiorQtd) { maiorQtd = qtd; escolhido = m; }
           }
-          if (ladoNome === "tras") {
-            compartimento.lados.tras = lado;
-          }
-          if (ladoNome === "meio") {
-            compartimento.lados.meio = lado;
-          }
+          const raizId = obterIdRaizDaCadeia(escolhido);
+          lado.cadeiaAlvoId = raizId;
+          const topo = obterTopoDaCadeia(lado, raizId) || escolhido;
+          monte.monteBase = topo;
+          lado.montes.push(monte);
+          monte.alocado = true;
+          compartimento.pesoTotal += monte.peso;
+          if (ladoNome === "frente") compartimento.lados.frente = lado;
+          if (ladoNome === "tras") compartimento.lados.tras = lado;
+          if (ladoNome === "meio") compartimento.lados.meio = lado;
           return compartimento;
         }
       }
@@ -817,23 +934,35 @@ function sobrepor(
   compartimentosOrdenados: Compartimento[]
 ): Compartimento | null {
   for (const compartimento of compartimentosOrdenados) {
-    const lados = Object.entries(compartimento.lados);
+    const lados = ladosBalanceados(compartimento);
     for (const [ladoNome, lado] of lados) {
+      // Se existe cadeia de sobreposição múltipla, SEMPRE seguir ela
+      if (lado.cadeiaAlvoId) {
+        const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
+        if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, 32)) {
+          monte.monteBase = topo;
+          lado.montes.push(monte);
+          monte.alocado = true;
+          compartimento.pesoTotal += monte.peso;
+          if (ladoNome === "frente") compartimento.lados.frente = lado;
+          if (ladoNome === "tras") compartimento.lados.tras = lado;
+          if (ladoNome === "meio") compartimento.lados.meio = lado;
+          return compartimento;
+        }
+        // Se não conseguiu sobrepor na cadeia, NÃO tentar em outros montes
+        continue;
+      }
+
+      // Sobreposição simples: independente, não usa cadeiaAlvoId
       for (const monteExistente of lado.montes) {
         if (verificarSePodeSobrepor(monte, monteExistente, lado, 32)) {
           monte.monteBase = monteExistente;
           lado.montes.push(monte);
           monte.alocado = true;
           compartimento.pesoTotal += monte.peso;
-          if (ladoNome === "frente") {
-            compartimento.lados.frente = lado;
-          }
-          if (ladoNome === "tras") {
-            compartimento.lados.tras = lado;
-          }
-          if (ladoNome === "meio") {
-            compartimento.lados.meio = lado;
-          }
+          if (ladoNome === "frente") compartimento.lados.frente = lado;
+          if (ladoNome === "tras") compartimento.lados.tras = lado;
+          if (ladoNome === "meio") compartimento.lados.meio = lado;
           return compartimento;
         }
       }
@@ -1004,8 +1133,65 @@ function tentarSobreposicaoFinal(
     for (const compartimento of compartimentos) {
       const lados = Object.entries(compartimento.lados);      
       for (const [ladoNome, lado] of lados) {
+        // Primeiro, procurar por montes que foram criados por sobreposição múltipla
+        const montesSobreposicaoMultipla = lado.montes.filter(m => 
+          m.monteBase && m.monteBase.monteBase // Monte que sobrepõe um monte que já sobrepõe outros
+        );
+        
+        // Se há montes de sobreposição múltipla, tentar sobrepor neles primeiro
+        if (montesSobreposicaoMultipla.length > 0) {
+          for (const monteSobreposicao of montesSobreposicaoMultipla) {
+            if (verificarSePodeSobrepor(monte, monteSobreposicao, lado, 34)) {
+              monte.monteBase = monteSobreposicao;
+              lado.montes.push(monte);
+              monte.alocado = true;
+              compartimento.pesoTotal += monte.peso;              
+              if (ladoNome === "frente") {
+                compartimento.lados.frente = lado;
+              }
+              if (ladoNome === "tras") {
+                compartimento.lados.tras = lado;
+              }
+              if (ladoNome === "meio") {
+                compartimento.lados.meio = lado;
+              }              
+              montesAlocados.push(monte);
+              alocado = true;
+              break;
+            }
+          }          
+          if (alocado) break;
+        }
+        
+        // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição normal
         const montesBase = lado.montes.filter(monte => !monte.monteBase);        
         if (montesBase.length > 0) {
+          // Se existe cadeia de sobreposição múltipla, SEMPRE tentar seguir ela primeiro
+          if (lado.cadeiaAlvoId) {
+            const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
+            if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, 34)) {
+              monte.monteBase = topo;
+              lado.montes.push(monte);
+              monte.alocado = true;
+              compartimento.pesoTotal += monte.peso;              
+              if (ladoNome === "frente") {
+                compartimento.lados.frente = lado;
+              }
+              if (ladoNome === "tras") {
+                compartimento.lados.tras = lado;
+              }
+              if (ladoNome === "meio") {
+                compartimento.lados.meio = lado;
+              }              
+              montesAlocados.push(monte);
+              alocado = true;
+              break;
+            }
+            // Se não conseguiu sobrepor na cadeia, NÃO tentar em outros montes
+            continue;
+          }
+
+          // Sobreposição simples: independente
           for (const monteBase of montesBase) {
             if (verificarSePodeSobrepor(monte, monteBase, lado, 34)) {
               monte.monteBase = monteBase;
@@ -1038,10 +1224,44 @@ function tentarSobreposicaoFinal(
         for (const compartimento of compartimentos) {
           const lados = Object.entries(compartimento.lados);          
           for (const [ladoNome, lado] of lados) {
+            // Primeiro, procurar por montes que foram criados por sobreposição múltipla
+            const montesSobreposicaoMultipla = lado.montes.filter(m => 
+              m.monteBase && m.monteBase.monteBase // Monte que sobrepõe um monte que já sobrepõe outros
+            );
+            
+            // Se há montes de sobreposição múltipla, tentar sobrepor neles primeiro
+            if (montesSobreposicaoMultipla.length > 0) {
+              for (const monteSobreposicao of montesSobreposicaoMultipla) {
+                if (verificarSePodeSobrepor(monteDeitado, monteSobreposicao, lado, 60)) {
+                  monteDeitado.monteBase = monteSobreposicao;
+                  lado.montes.push(monteDeitado);
+                  monteDeitado.alocado = true;
+                  compartimento.pesoTotal += monteDeitado.peso;                
+                  if (ladoNome === "frente") {
+                    compartimento.lados.frente = lado;
+                  }
+                  if (ladoNome === "tras") {
+                    compartimento.lados.tras = lado;
+                  }
+                  if (ladoNome === "meio") {
+                    compartimento.lados.meio = lado;
+                  }                
+                  montesAlocados.push(monteDeitado);
+                  conseguiuAlocarAlgum = true;
+                  break;
+                }
+              }          
+              if (conseguiuAlocarAlgum) break;
+            }
+            
+            // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição múltipla
             const montesBase = lado.montes.filter(monte => !monte.monteBase);            
             if (montesBase.length >= 1) {
-              if (verificarSePodeSobreporMultiplos(monteDeitado, montesBase, lado, 60)) {
-                monteDeitado.monteBase = montesBase[0];
+              if (verificarSePodeSobreporMultiplos(monteDeitado, montesBase, lado, 60, compartimento)) {
+                const raizEscolhida = obterIdRaizDaCadeia(montesBase[0]);
+                lado.cadeiaAlvoId = raizEscolhida;
+                const topo = obterTopoDaCadeia(lado, raizEscolhida) || montesBase[0];
+                monteDeitado.monteBase = topo;
                 lado.montes.push(monteDeitado);
                 monteDeitado.alocado = true;
                 compartimento.pesoTotal += monteDeitado.peso;                
@@ -1066,8 +1286,65 @@ function tentarSobreposicaoFinal(
           for (const compartimento of compartimentos) {
             const lados = Object.entries(compartimento.lados);            
             for (const [ladoNome, lado] of lados) {
+              // Primeiro, procurar por montes que foram criados por sobreposição múltipla
+              const montesSobreposicaoMultipla = lado.montes.filter(m => 
+                m.monteBase && m.monteBase.monteBase // Monte que sobrepõe um monte que já sobrepõe outros
+              );
+              
+              // Se há montes de sobreposição múltipla, tentar sobrepor neles primeiro
+              if (montesSobreposicaoMultipla.length > 0) {
+                for (const monteSobreposicao of montesSobreposicaoMultipla) {
+                  if (verificarSePodeSobrepor(monteDeitado, monteSobreposicao, lado, 34)) {
+                    monteDeitado.monteBase = monteSobreposicao;
+                    lado.montes.push(monteDeitado);
+                    monteDeitado.alocado = true;
+                    compartimento.pesoTotal += monteDeitado.peso;                    
+                    if (ladoNome === "frente") {
+                      compartimento.lados.frente = lado;
+                    }
+                    if (ladoNome === "tras") {
+                      compartimento.lados.tras = lado;
+                    }
+                    if (ladoNome === "meio") {
+                      compartimento.lados.meio = lado;
+                    }                    
+                    montesAlocados.push(monteDeitado);
+                    conseguiuAlocarAlgum = true;
+                    break;
+                  }
+                }          
+                if (conseguiuAlocarAlgum) break;
+              }
+              
+              // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição normal
               const montesBase = lado.montes.filter(monte => !monte.monteBase);              
               if (montesBase.length > 0) {
+                // Se existe cadeia de sobreposição múltipla, SEMPRE tentar seguir ela primeiro
+                if (lado.cadeiaAlvoId) {
+                  const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
+                  if (topo && verificarSePodeSobrepor(monteDeitado, topo as Monte & {empilhados?: Monte[]}, lado, 34)) {
+                    monteDeitado.monteBase = topo;
+                    lado.montes.push(monteDeitado);
+                    monteDeitado.alocado = true;
+                    compartimento.pesoTotal += monteDeitado.peso;                    
+                    if (ladoNome === "frente") {
+                      compartimento.lados.frente = lado;
+                    }
+                    if (ladoNome === "tras") {
+                      compartimento.lados.tras = lado;
+                    }
+                    if (ladoNome === "meio") {
+                      compartimento.lados.meio = lado;
+                    }                    
+                    montesAlocados.push(monteDeitado);
+                    conseguiuAlocarAlgum = true;
+                    break;
+                  }
+                  // Se não conseguiu sobrepor na cadeia, NÃO tentar em outros montes
+                  continue;
+                }
+
+                // Sobreposição simples: independente
                 for (const monteBase of montesBase) {
                   if (verificarSePodeSobrepor(monteDeitado, monteBase, lado, 34)) {
                     monteDeitado.monteBase = monteBase;
@@ -1152,10 +1429,45 @@ function tentarSobreposicaoFinal(
           for (const compartimento of compartimentos) {
             const lados = Object.entries(compartimento.lados);            
             for (const [ladoNome, lado] of lados) {
+              // Primeiro, procurar por montes que foram criados por sobreposição múltipla
+              const montesSobreposicaoMultipla = lado.montes.filter(m => 
+                m.monteBase && m.monteBase.monteBase // Monte que sobrepõe um monte que já sobrepõe outros
+              );
+              
+              // Se há montes de sobreposição múltipla, tentar sobrepor neles primeiro
+              if (montesSobreposicaoMultipla.length > 0) {
+                for (const monteSobreposicao of montesSobreposicaoMultipla) {
+                  if (verificarSePodeSobrepor(monteEmPe, monteSobreposicao, lado, 60)) {
+                    monteEmPe.monteBase = monteSobreposicao;
+                    lado.montes.push(monteEmPe);
+                    monteEmPe.alocado = true;
+                    compartimento.pesoTotal += monteEmPe.peso;
+                    if (ladoNome === "frente") {
+                      compartimento.lados.frente = lado;
+                    }
+                    if (ladoNome === "tras") {
+                      compartimento.lados.tras = lado;
+                    }
+                    if (ladoNome === "meio") {
+                      compartimento.lados.meio = lado;
+                    }
+                    
+                    montesAlocados.push(monteEmPe);
+                    conseguiuAlocarAlgum = true;
+                    break;
+                  }
+                }          
+                if (conseguiuAlocarAlgum) break;
+              }
+              
+              // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição múltipla
               const montesBase = lado.montes.filter(monte => !monte.monteBase);              
               if (montesBase.length >= 1) {
-                if (verificarSePodeSobreporMultiplos(monteEmPe, montesBase, lado, 60)) {
-                  monteEmPe.monteBase = montesBase[0];
+                if (verificarSePodeSobreporMultiplos(monteEmPe, montesBase, lado, 60, compartimento)) {
+                  const raizEscolhida = obterIdRaizDaCadeia(montesBase[0]);
+                  lado.cadeiaAlvoId = raizEscolhida;
+                  const topo = obterTopoDaCadeia(lado, raizEscolhida) || montesBase[0];
+                  monteEmPe.monteBase = topo;
                   lado.montes.push(monteEmPe);
                   monteEmPe.alocado = true;
                   compartimento.pesoTotal += monteEmPe.peso;
@@ -1182,8 +1494,65 @@ function tentarSobreposicaoFinal(
           for (const compartimento of compartimentos) {
             const lados = Object.entries(compartimento.lados);            
             for (const [ladoNome, lado] of lados) {
+              // Primeiro, procurar por montes que foram criados por sobreposição múltipla
+              const montesSobreposicaoMultipla = lado.montes.filter(m => 
+                m.monteBase && m.monteBase.monteBase // Monte que sobrepõe um monte que já sobrepõe outros
+              );
+              
+              // Se há montes de sobreposição múltipla, tentar sobrepor neles primeiro
+              if (montesSobreposicaoMultipla.length > 0) {
+                for (const monteSobreposicao of montesSobreposicaoMultipla) {
+                  if (verificarSePodeSobrepor(monteEmPe, monteSobreposicao, lado, 34)) {
+                    monteEmPe.monteBase = monteSobreposicao;
+                    lado.montes.push(monteEmPe);
+                    monteEmPe.alocado = true;
+                    compartimento.pesoTotal += monteEmPe.peso;
+                    if (ladoNome === "frente") {
+                      compartimento.lados.frente = lado;
+                    }
+                    if (ladoNome === "tras") {
+                      compartimento.lados.tras = lado;
+                    }
+                    if (ladoNome === "meio") {
+                      compartimento.lados.meio = lado;
+                    }                    
+                    montesAlocados.push(monteEmPe);
+                    conseguiuAlocarAlgum = true;
+                    break;
+                  }
+                }          
+                if (conseguiuAlocarAlgum) break;
+              }
+              
+              // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição normal
               const montesBase = lado.montes.filter(monte => !monte.monteBase);              
               if (montesBase.length > 0) {
+                // Se existe cadeia de sobreposição múltipla, SEMPRE tentar seguir ela primeiro
+                if (lado.cadeiaAlvoId) {
+                  const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
+                  if (topo && verificarSePodeSobrepor(monteEmPe, topo as Monte & {empilhados?: Monte[]}, lado, 34)) {
+                    monteEmPe.monteBase = topo;
+                    lado.montes.push(monteEmPe);
+                    monteEmPe.alocado = true;
+                    compartimento.pesoTotal += monteEmPe.peso;
+                    if (ladoNome === "frente") {
+                      compartimento.lados.frente = lado;
+                    }
+                    if (ladoNome === "tras") {
+                      compartimento.lados.tras = lado;
+                    }
+                    if (ladoNome === "meio") {
+                      compartimento.lados.meio = lado;
+                    }                    
+                    montesAlocados.push(monteEmPe);
+                    conseguiuAlocarAlgum = true;
+                    break;
+                  }
+                  // Se não conseguiu sobrepor na cadeia, NÃO tentar em outros montes
+                  continue;
+                }
+
+                // Sobreposição simples: independente
                 for (const monteBase of montesBase) {
                   if (verificarSePodeSobrepor(monteEmPe, monteBase, lado, 34)) {
                     monteEmPe.monteBase = monteBase;
@@ -1333,5 +1702,22 @@ export function distribuirProdutos(
     montesNaoAlocados.length = 0;
     montesNaoAlocados.push(...resultadoSobreposicao.montesNaoAlocados);
   }
+  // Debug: contar produtos para verificar se há perda
+  let totalProdutosMontesAlocados = 0;
+  let totalProdutosMontesNaoAlocados = 0;
+  
+  for (const monte of montesAlocados) {
+    totalProdutosMontesAlocados += contarProdutosNosMontes(monte);
+  }
+  
+  for (const monte of montesNaoAlocados) {
+    totalProdutosMontesNaoAlocados += contarProdutosNosMontes(monte);
+  }
+  
+  console.log(`DEBUG - Total produtos: ${produtos.length}`);
+  console.log(`DEBUG - Total produtos em montes alocados: ${totalProdutosMontesAlocados}`);
+  console.log(`DEBUG - Total produtos em montes não alocados: ${totalProdutosMontesNaoAlocados}`);
+  console.log(`DEBUG - Diferença: ${produtos.length - (totalProdutosMontesAlocados + totalProdutosMontesNaoAlocados)}`);
+  
   return {compartimentos, montesAlocados, montesNaoAlocados};
 }
