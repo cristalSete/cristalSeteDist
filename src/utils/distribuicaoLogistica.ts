@@ -1046,6 +1046,107 @@ function separarPecasDeitadas(monte: Monte): { monteDeitado: Monte | null, monte
   return { monteDeitado, monteEmPe };
 }
 
+/**
+ * Tenta agrupar todos os montes de um cliente no mesmo cavalete, lado a lado
+ * Retorna array vazio se não conseguir agrupar todos
+ */
+function tentarAgruparMontesNoMesmoCavalete(
+  montes: Monte[],
+  compartimentos: Compartimento[]
+): Monte[] {
+  // Tentar cada compartimento na ordem de preferência
+  for (const compartimento of compartimentos) {
+    const montesAlocados: Monte[] = [];
+    let todosAlocados = true;
+    
+    // Tentar alocar todos os montes neste compartimento
+    for (const monte of montes) {
+      let alocado = false;
+      
+      // 1. Montes especiais no meio
+      if (monte.largura <= 2200 && monte.especial) {
+        if (colocarNoMeio(monte, [compartimento])) {
+          montesAlocados.push(monte);
+          alocado = true;
+        }
+      }
+      
+      // 2. Montes normais como base (lado a lado)
+      if (!alocado && !monte.especial) {
+        try {
+          const compartimentoAtualizado = colocarNoCompartimento(
+            compartimento,
+            monte,
+            montes.reduce((total, m) => total + m.peso, 0)
+          );
+          if (compartimentoAtualizado) {
+            // Atualizar o compartimento original
+            compartimento.lados = compartimentoAtualizado.lados;
+            compartimento.pesoTotal = compartimentoAtualizado.pesoTotal;
+            montesAlocados.push(monte);
+            alocado = true;
+          }
+        } catch {
+          // Ignorar erros e continuar
+        }
+      }
+      
+      // 3. Se não conseguiu como base, tentar sobreposição
+      if (!alocado) {
+        const compartimentoAtualizado = sobrepor(
+          monte,
+          [compartimento]
+        );
+        if (compartimentoAtualizado) {
+          montesAlocados.push(monte);
+          alocado = true;
+        }
+      }
+      
+      // 4. Última tentativa: sobreposição múltipla
+      if (!alocado) {
+        const compartimentoAtualizado = sobreporMultiplos(
+          monte,
+          [compartimento]
+        );
+        if (compartimentoAtualizado) {
+          montesAlocados.push(monte);
+          alocado = true;
+        }
+      }
+      
+      if (!alocado) {
+        todosAlocados = false;
+        break;
+      }
+    }
+    
+    // Se conseguiu alocar todos os montes neste compartimento
+    if (todosAlocados) {
+      return montesAlocados;
+    }
+    
+    // Se não conseguiu, reverter as alocações e tentar próximo compartimento
+    for (const monte of montesAlocados) {
+      monte.alocado = false;
+      // Remover o monte do compartimento
+      for (const lado of Object.values(compartimento.lados)) {
+        const index = lado.montes.findIndex(m => m.id === monte.id);
+        if (index !== -1) {
+          lado.montes.splice(index, 1);
+          lado.larguraOcupada -= monte.largura;
+          lado.larguraRestante += monte.largura;
+          break;
+        }
+      }
+      compartimento.pesoTotal -= monte.peso;
+    }
+  }
+  
+  // Não conseguiu agrupar em nenhum compartimento
+  return [];
+}
+
 function distribuirMontesNosCavaletes(
   montesDeUmCliente: Monte[],
   compartimentos: Compartimento[]
@@ -1066,55 +1167,71 @@ function distribuirMontesNosCavaletes(
   }, 0);
   // Ordenar todos os montes por peso para distribuição eficiente
   const montesOrdenados = [...montesNormais.sort((a, b) => a.peso - b.peso), ...montesEspeciais];
-  for (const monte of montesOrdenados) {
-    let alocado = false;
-    if (monte.largura <= 2200 && monte.especial) {
-      if (colocarNoMeio(monte, compartimentosOrdenados)) {
-        alocado = true;
-      }
-    }
-    if (alocado == false) {
-      const compartimentoAtualizadoSobreposto = sobrepor(
-        monte,
-        compartimentosOrdenados
-      );
-      if (compartimentoAtualizadoSobreposto) {
-        alocado = true;
-      }
-    }
-    if (!alocado && !monte.especial) {
-      for (const compartimento of compartimentosOrdenados) {
-        try {
-          const compartimentoAtualizado = colocarNoCompartimento(
-            compartimento,
-            monte,
-            pesoTotalDosMontes
-          );
-          if (compartimentoAtualizado) {
-            const index = compartimentos.findIndex(
-              (c) => c.id === compartimentoAtualizado.id
-            );
-            if (index !== -1) {
-              compartimentos[index].lados = compartimentoAtualizado.lados;
-              compartimentos[index].pesoTotal = compartimentoAtualizado.pesoTotal;
-            }
-            alocado = true;
-            break;
-          }
-        } catch {
+  
+  // ESTRATÉGIA 1: Tentar agrupar todos os montes do mesmo cliente no mesmo cavalete, lado a lado
+  const montesAgrupados = tentarAgruparMontesNoMesmoCavalete(montesOrdenados, compartimentosOrdenados);
+  
+  // ESTRATÉGIA 2: Se não conseguiu agrupar, usar a estratégia padrão
+  if (montesAgrupados.length === 0) {
+    for (const monte of montesOrdenados) {
+      let alocado = false;
+      
+      // 1. Primeiro tentar colocar no meio (montes especiais)
+      if (monte.largura <= 2200 && monte.especial) {
+        if (colocarNoMeio(monte, compartimentosOrdenados)) {
+          alocado = true;
         }
       }
-    }
-    if (!alocado) {
-      const compartimentoAtualizadoMultiplos = sobreporMultiplos(
-        monte,
-        compartimentosOrdenados
-      );
-      if (compartimentoAtualizadoMultiplos) {
-        alocado = true;
+      
+      // 2. Tentar colocar como monte base (prioridade máxima para não especiais)
+      if (!alocado && !monte.especial) {
+        for (const compartimento of compartimentosOrdenados) {
+          try {
+            const compartimentoAtualizado = colocarNoCompartimento(
+              compartimento,
+              monte,
+              pesoTotalDosMontes
+            );
+            if (compartimentoAtualizado) {
+              const index = compartimentos.findIndex(
+                (c) => c.id === compartimentoAtualizado.id
+              );
+              if (index !== -1) {
+                compartimentos[index].lados = compartimentoAtualizado.lados;
+                compartimentos[index].pesoTotal = compartimentoAtualizado.pesoTotal;
+              }
+              alocado = true;
+              break;
+            }
+          } catch {
+          }
+        }
       }
-    }
-    if (!alocado) {
+      
+      // 3. Só depois tentar sobreposições (simples e múltiplas)
+      if (!alocado) {
+        const compartimentoAtualizadoSobreposto = sobrepor(
+          monte,
+          compartimentosOrdenados
+        );
+        if (compartimentoAtualizadoSobreposto) {
+          alocado = true;
+        }
+      }
+      
+      if (!alocado) {
+        const compartimentoAtualizadoMultiplos = sobreporMultiplos(
+          monte,
+          compartimentosOrdenados
+        );
+        if (compartimentoAtualizadoMultiplos) {
+          alocado = true;
+        }
+      }
+      
+      if (!alocado) {
+        // Monte não conseguiu ser alocado
+      }
     }
   }
   return compartimentosOrdenados;
