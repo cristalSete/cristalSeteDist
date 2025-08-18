@@ -20,9 +20,72 @@ const detectSeparator = (firstLine: string): string => {
 };
 
 /**
+ * Parse uma linha CSV respeitando aspas e preservando o conteúdo original
+ * @param line A linha CSV a ser parseada
+ * @param separator O separador usado no CSV
+ * @returns Array com as células parseadas
+ */
+const parseCsvLine = (line: string, separator: string): string[] => {
+  const cells: string[] = [];
+  let currentCell = '';
+  let insideQuotes = false;
+  let i = 0;
+
+  while (i < line.length) {
+    const char = line[i];
+    
+    if (char === '"') {
+      if (insideQuotes) {
+        // Verifica se é uma aspa dupla (escape)
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          currentCell += '"';
+          i += 2; // Pula as duas aspas
+          continue;
+        } else {
+          // Fim das aspas
+          insideQuotes = false;
+        }
+      } else {
+        // Início das aspas
+        insideQuotes = true;
+      }
+    } else if (char === separator && !insideQuotes) {
+      // Fim da célula
+      cells.push(currentCell.trim());
+      currentCell = '';
+    } else {
+      // Adiciona o caractere à célula atual
+      currentCell += char;
+    }
+    
+    i++;
+  }
+  
+  // Adiciona a última célula
+  cells.push(currentCell.trim());
+  
+  return cells;
+};
+
+/**
+ * Remove aspas externas de uma string se existirem
+ * @param str A string que pode conter aspas
+ * @returns A string sem aspas externas
+ */
+const removeOuterQuotes = (str: string): string => {
+  const trimmed = str.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || 
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+};
+
+/**
  * Lê um arquivo CSV com separador automático (ponto e vírgula, vírgula ou tabulação),
  * remove linhas inválidas e converte os dados em um array de objetos JSON
  * com base no cabeçalho da primeira linha.
+ * Agora lida corretamente com células que podem ou não conter aspas.
  *
  * @param file O arquivo CSV selecionado pelo usuário.
  * @param onLoad Função de callback chamada com os dados convertidos em JSON.
@@ -50,7 +113,7 @@ export const readCsvFile = (
     const separator = detectSeparator(lines[0]);
 
     const parsedData = lines
-      .map((line) => line.split(separator).map((cell) => cell.trim()))
+      .map((line) => parseCsvLine(line, separator))
       .filter((cols) => cols.length >= 7 && cols.slice(0, 50).some((c) => c));
 
     const trimmedData = parsedData.map((cols) => cols.slice(0, 50));
@@ -60,7 +123,12 @@ export const readCsvFile = (
     );
 
     const jsonArray = rows.map((row) =>
-      Object.fromEntries(header.map((key, index) => [key, row[index]]))
+      Object.fromEntries(
+        header.map((key, index) => [
+          key, 
+          removeOuterQuotes(row[index] || '')
+        ])
+      )
     ) as unknown as CsvProduto[];
 
     onLoad(jsonArray);
