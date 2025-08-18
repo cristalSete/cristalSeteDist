@@ -477,6 +477,11 @@ function encontrarMelhorCombinacaoMontes(
   maxCombinacoes: number = 10,
   compartimento?: Compartimento
 ): Monte[] | null {
+  // Sobreposição múltipla só é permitida no cavalete_3
+  if (!compartimento || compartimento.id !== "cavalete_3") {
+    return null;
+  }
+  
   // Se já existe uma cadeia ativa, NÃO permitir criar nova sobreposição múltipla
   if (lado.cadeiaAlvoId) {
     return null;
@@ -1232,7 +1237,7 @@ function tentarSobreposicaoFinal(
             // Se há montes de sobreposição múltipla, tentar sobrepor neles primeiro
             if (montesSobreposicaoMultipla.length > 0) {
               for (const monteSobreposicao of montesSobreposicaoMultipla) {
-                if (verificarSePodeSobrepor(monteDeitado, monteSobreposicao, lado, 60)) {
+                if (verificarSePodeSobrepor(monteDeitado, monteSobreposicao, lado, 34)) {
                   monteDeitado.monteBase = monteSobreposicao;
                   lado.montes.push(monteDeitado);
                   monteDeitado.alocado = true;
@@ -1254,9 +1259,9 @@ function tentarSobreposicaoFinal(
               if (conseguiuAlocarAlgum) break;
             }
             
-            // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição múltipla
+            // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição múltipla (apenas no cavalete_3)
             const montesBase = lado.montes.filter(monte => !monte.monteBase);            
-            if (montesBase.length >= 1) {
+            if (montesBase.length >= 1 && compartimento.id === "cavalete_3") {
               if (verificarSePodeSobreporMultiplos(monteDeitado, montesBase, lado, 60, compartimento)) {
                 const raizEscolhida = obterIdRaizDaCadeia(montesBase[0]);
                 lado.cadeiaAlvoId = raizEscolhida;
@@ -1437,7 +1442,7 @@ function tentarSobreposicaoFinal(
               // Se há montes de sobreposição múltipla, tentar sobrepor neles primeiro
               if (montesSobreposicaoMultipla.length > 0) {
                 for (const monteSobreposicao of montesSobreposicaoMultipla) {
-                  if (verificarSePodeSobrepor(monteEmPe, monteSobreposicao, lado, 60)) {
+                  if (verificarSePodeSobrepor(monteEmPe, monteSobreposicao, lado, 34)) {
                     monteEmPe.monteBase = monteSobreposicao;
                     lado.montes.push(monteEmPe);
                     monteEmPe.alocado = true;
@@ -1460,9 +1465,9 @@ function tentarSobreposicaoFinal(
                 if (conseguiuAlocarAlgum) break;
               }
               
-              // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição múltipla
+              // Se não conseguiu sobrepor nos montes de sobreposição múltipla, tentar sobreposição múltipla (apenas no cavalete_3)
               const montesBase = lado.montes.filter(monte => !monte.monteBase);              
-              if (montesBase.length >= 1) {
+              if (montesBase.length >= 1 && compartimento.id === "cavalete_3") {
                 if (verificarSePodeSobreporMultiplos(monteEmPe, montesBase, lado, 60, compartimento)) {
                   const raizEscolhida = obterIdRaizDaCadeia(montesBase[0]);
                   lado.cadeiaAlvoId = raizEscolhida;
@@ -1680,20 +1685,23 @@ export function distribuirProdutos(
     const clienteUnico = produtosAgrupadosPorCliente[i];    
     const montesDeUmCliente = gerarMontes(clienteUnico.produtos);    
     
-    // Primeiro, tentar alocar com preferências
-    const resultadoAlocacao = tentarAlocarComPreferencias(montesDeUmCliente, compartimentos, clienteUnico.idCliente);
+    // PRIMEIRA REGRA: Tentar alocar montes em pé em um único cavalete
+    const resultadoMontesEmPe = tentarAlocarMontesEmPeEmUnicoCavalete(montesDeUmCliente, compartimentos);
     
-    // Se ainda há montes não alocados, tentar alocação normal
+    // SEGUNDA REGRA: Tentar alocar com preferências (apenas para montes não alocados pela primeira regra)
+    const resultadoAlocacao = tentarAlocarComPreferencias(resultadoMontesEmPe.montesNaoAlocados, compartimentos, clienteUnico.idCliente);
+    
+    // TERCEIRA REGRA: Se ainda há montes não alocados, tentar alocação normal
     if (resultadoAlocacao.montesNaoAlocados.length > 0) {
       distribuirMontesNosCavaletes(resultadoAlocacao.montesNaoAlocados, compartimentos);
       
       const montesAlocadosNormal = resultadoAlocacao.montesNaoAlocados.filter((monte) => monte.alocado);
       const montesNaoAlocadosNormal = resultadoAlocacao.montesNaoAlocados.filter((monte) => !monte.alocado);
       
-      montesAlocados.push(...resultadoAlocacao.montesAlocados, ...montesAlocadosNormal);
+      montesAlocados.push(...resultadoMontesEmPe.montesAlocados, ...resultadoAlocacao.montesAlocados, ...montesAlocadosNormal);
       montesNaoAlocados.push(...montesNaoAlocadosNormal);
     } else {
-      montesAlocados.push(...resultadoAlocacao.montesAlocados);
+      montesAlocados.push(...resultadoMontesEmPe.montesAlocados, ...resultadoAlocacao.montesAlocados);
     }
   }  
   if (montesNaoAlocados.length > 0) {
@@ -1720,4 +1728,108 @@ export function distribuirProdutos(
   console.log(`DEBUG - Diferença: ${produtos.length - (totalProdutosMontesAlocados + totalProdutosMontesNaoAlocados)}`);
   
   return {compartimentos, montesAlocados, montesNaoAlocados};
+}
+
+/**
+ * Tenta alocar todos os montes em pé de um cliente em um único cavalete
+ * Esta regra é aplicada ANTES das outras regras para evitar sobreposições desnecessárias.
+ * 
+ * OBJETIVO: Quando um cliente tem montes em pé, tentar alocá-los todos em um único cavalete
+ * para evitar que sejam distribuídos em diferentes cavaletes ou sobrepostos a montes base.
+ * 
+ * PRIORIDADE: cavalete_3 > cavalete_2 > cavalete_1 > malhau
+ * 
+ * REGRAS:
+ * 1. Só considera montes não especiais e que contêm apenas produtos que não precisam ser deitados
+ * 2. Tenta alocar todos os montes em pé em um único lado de um compartimento
+ * 3. Para compartimentos horizontais, usa apenas frente e trás (meio reservado para especiais)
+ * 4. Se não conseguir, retorna todos os montes como não alocados para processamento pelas outras regras
+ * 5. Não desfaz alocações existentes, apenas tenta alocar montes não alocados
+ */
+function tentarAlocarMontesEmPeEmUnicoCavalete(
+  montesDeUmCliente: Monte[],
+  compartimentos: Compartimento[]
+): { montesAlocados: Monte[], montesNaoAlocados: Monte[] } {
+  const montesAlocados: Monte[] = [];
+  const montesNaoAlocados: Monte[] = [];
+  
+  // Filtrar apenas montes em pé (não especiais e que contêm apenas produtos que não precisam ser deitados)
+  const montesEmPe = montesDeUmCliente.filter(monte => {
+    if (monte.especial || monte.alocado) return false;
+    
+    // Verificar se todos os produtos do monte não precisam ser deitados
+    return monte.produtos.every(produto => !produto.precisaDeitado);
+  });
+  
+  if (montesEmPe.length === 0) {
+    // Se não há montes em pé, retornar todos os montes como não alocados
+    montesNaoAlocados.push(...montesDeUmCliente);
+    return { montesAlocados, montesNaoAlocados };
+  }
+  
+  // Ordenar compartimentos por prioridade (cavalete_3 primeiro, depois cavalete_2, cavalete_1, malhau)
+  const ordemPrioridade = ["cavalete_3", "cavalete_2", "cavalete_1", "malhau"];
+  const compartimentosOrdenados = ordemPrioridade
+    .map(id => compartimentos.find(comp => comp.id === id))
+    .filter(Boolean) as Compartimento[];
+  
+  // Tentar alocar todos os montes em pé em um único compartimento
+  for (const compartimento of compartimentosOrdenados) {
+    // Verificar se todos os montes cabem no compartimento
+    const larguraTotalNecessaria = montesEmPe.reduce((total, monte) => total + monte.largura, 0);
+    
+    // Verificar se há espaço suficiente em pelo menos um lado
+    let espacoDisponivel = false;
+    let ladoEscolhido: "frente" | "tras" | "meio" | null = null;
+    
+    if (compartimento.orientacao === "horizontal") {
+      // Para compartimentos horizontais, verificar apenas frente e trás (meio reservado para especiais)
+      if (compartimento.lados.frente.larguraRestante >= larguraTotalNecessaria) {
+        espacoDisponivel = true;
+        ladoEscolhido = "frente";
+      } else if (compartimento.lados.tras && compartimento.lados.tras.larguraRestante >= larguraTotalNecessaria) {
+        espacoDisponivel = true;
+        ladoEscolhido = "tras";
+      }
+    } else {
+      // Para compartimentos verticais (cavalete_3), verificar frente e trás
+      if (compartimento.lados.frente.larguraRestante >= larguraTotalNecessaria) {
+        espacoDisponivel = true;
+        ladoEscolhido = "frente";
+      } else if (compartimento.lados.tras && compartimento.lados.tras.larguraRestante >= larguraTotalNecessaria) {
+        espacoDisponivel = true;
+        ladoEscolhido = "tras";
+      }
+    }
+    
+    if (espacoDisponivel && ladoEscolhido) {
+      // Alocar todos os montes em pé no lado escolhido
+      const lado = compartimento.lados[ladoEscolhido];
+      if (!lado) continue; // Skip se o lado não existir
+      
+      for (const monte of montesEmPe) {
+        monte.alocado = true;
+        monte.lado = "motorista"; // Definir lado padrão
+        lado.montes.push(monte);
+        lado.larguraOcupada += monte.largura;
+        lado.larguraRestante -= monte.largura;
+        montesAlocados.push(monte);
+      }
+      
+      // Atualizar o peso total do compartimento
+      compartimento.pesoTotal += montesEmPe.reduce((total, monte) => total + monte.peso, 0);
+      
+      // Adicionar os montes especiais e deitados como não alocados para processamento posterior
+      const montesRestantes = montesDeUmCliente.filter(monte => 
+        monte.especial || !monte.alocado || monte.produtos.some(produto => produto.precisaDeitado)
+      );
+      montesNaoAlocados.push(...montesRestantes);
+      
+      return { montesAlocados, montesNaoAlocados };
+    }
+  }
+  
+  // Se não conseguiu alocar em um único cavalete, retornar todos como não alocados
+  montesNaoAlocados.push(...montesDeUmCliente);
+  return { montesAlocados, montesNaoAlocados };
 }
