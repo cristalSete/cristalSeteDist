@@ -63,26 +63,53 @@ function gerarMontes(produtosDeUmCliente: ProdutoFormatado[]): Monte[] {
       unidadesNormais.push({...produto, quantidade: 1});
     }
   }
-  const total = unidadesNormais.length;
+  const unidadesNormaisDeitadas: ProdutoFormatado[] = [];
+  const unidadesNormaisEmPe: ProdutoFormatado[] = [];
+  for (const unidade of unidadesNormais) {
+    if (unidade.precisaDeitado) {
+      unidadesNormaisDeitadas.push(unidade);
+    } else {
+      unidadesNormaisEmPe.push(unidade);
+    }
+  }
+  if (unidadesNormaisDeitadas.length > 0) {
+    const deitadosTotais = unidadesNormaisDeitadas.length;
+    const numMontesDeitados = Math.ceil(deitadosTotais / maxPorMonte);
+    const tamanhoBaseDeitados = Math.floor(deitadosTotais / numMontesDeitados);
+    const restanteDeitados = deitadosTotais % numMontesDeitados;
+    let indexDeitados = 0;
+    for (let i = 0; i < numMontesDeitados; i++) {
+      const sizeDeitados = tamanhoBaseDeitados + (i < restanteDeitados ? 1 : 0);
+      const produtosDoMonteDeitados = unidadesNormaisDeitadas.slice(indexDeitados, indexDeitados + sizeDeitados);
+      const pesoDeitado = produtosDoMonteDeitados.reduce((pesoTotal, unidade) => {
+        return (pesoTotal += unidade.peso);
+      }, 0);
+      const maiorAlturaDeitados = Math.max(...produtosDoMonteDeitados.map((item) => item.altura));
+      const larguraFinalDeitados = produtosDoMonteDeitados.at(0)?.largura ?? 0;
+      montes.push({
+        id: uuidv4(),
+        altura: maiorAlturaDeitados,
+        largura: larguraFinalDeitados,
+        produtos: produtosDoMonteDeitados,
+        peso: pesoDeitado,
+        lado: "motorista",
+        alocado: false,
+        especial: false,
+      });
+      indexDeitados += sizeDeitados;
+    }
+  }
+  const total = unidadesNormaisEmPe.length;
   const numMontes = Math.ceil(total / maxPorMonte);
   const tamanhoBase = Math.floor(total / numMontes);
   const restante = total % numMontes;
   let index = 0;
   for (let i = 0; i < numMontes; i++) {
     const size = tamanhoBase + (i < restante ? 1 : 0);
-    const produtosDoMonte = unidadesNormais.slice(index, index + size);
+    const produtosDoMonte = unidadesNormaisEmPe.slice(index, index + size);
     const peso = produtosDoMonte.reduce((pesoTotal, unidade) => {
       return (pesoTotal += unidade.peso);
       }, 0);
-    const algumProdutoPrecisaDeitar = produtosDoMonte.some(produto => produto.precisaDeitado);    
-    if (algumProdutoPrecisaDeitar) {
-      produtosDoMonte.forEach(produto => {
-        produto.precisaDeitado = true;
-        const larguraAntiga = produto.largura;
-        produto.largura = produto.altura;
-        produto.altura = larguraAntiga;
-      });
-    }
     const maiorAltura = Math.max(...produtosDoMonte.map((item) => item.altura));
     const larguraFinal = produtosDoMonte.at(0)?.largura ?? 0;
     montes.push({
@@ -105,16 +132,7 @@ function gerarMontes(produtosDeUmCliente: ProdutoFormatado[]): Monte[] {
     if (primeiroMonte.length > 0) {
       const pesoPrimeiroMonte = primeiroMonte.reduce((pesoTotal, unidade) => {
         return (pesoTotal += unidade.peso);
-      }, 0);      
-      const algumProdutoPrecisaDeitar = primeiroMonte.some(produto => produto.precisaDeitado);      
-      if (algumProdutoPrecisaDeitar) {
-        primeiroMonte.forEach(produto => {
-          produto.precisaDeitado = true;
-          const larguraAntiga = produto.largura;
-          produto.largura = produto.altura;
-          produto.altura = larguraAntiga;
-        });
-      }      
+      }, 0);
       const maiorAlturaPrimeiro = Math.max(...primeiroMonte.map((item) => item.altura));
       const larguraFinalPrimeiro = primeiroMonte.at(0)?.largura ?? 0;      
     montes.push({
@@ -131,16 +149,7 @@ function gerarMontes(produtosDeUmCliente: ProdutoFormatado[]): Monte[] {
     if (segundoMonte.length > 0) {
       const pesoSegundoMonte = segundoMonte.reduce((pesoTotal, unidade) => {
         return (pesoTotal += unidade.peso);
-      }, 0);      
-      const algumProdutoPrecisaDeitar = segundoMonte.some(produto => produto.precisaDeitado);      
-      if (algumProdutoPrecisaDeitar) {
-        segundoMonte.forEach(produto => {
-          produto.precisaDeitado = true;
-          const larguraAntiga = produto.largura;
-          produto.largura = produto.altura;
-          produto.altura = larguraAntiga;
-        });
-      }      
+      }, 0);     
       const maiorAlturaSegundo = Math.max(...segundoMonte.map((item) => item.altura));
       const larguraFinalSegundo = segundoMonte.at(0)?.largura ?? 0;      
       montes.push({
@@ -158,16 +167,7 @@ function gerarMontes(produtosDeUmCliente: ProdutoFormatado[]): Monte[] {
     if (unidadesEspeciais.length > 0) {
       const pesoTotalEspeciais = unidadesEspeciais.reduce((pesoTotal, unidade) => {
         return (pesoTotal += unidade.peso);
-      }, 0);      
-      const algumProdutoPrecisaDeitar = unidadesEspeciais.some(produto => produto.precisaDeitado);      
-      if (algumProdutoPrecisaDeitar) {
-        unidadesEspeciais.forEach(produto => {
-          produto.precisaDeitado = true;
-          const larguraAntiga = produto.largura;
-          produto.largura = produto.altura;
-          produto.altura = larguraAntiga;
-        });
-      }      
+      }, 0);
       const maiorAltura = Math.max(...unidadesEspeciais.map((item) => item.altura));
       const larguraFinal = unidadesEspeciais.at(0)?.largura ?? 0;      
       montes.push({
@@ -250,24 +250,114 @@ function colocarNoCompartimento(
       return compartimento;
     }
   } else {
-    const ladoPreferencial = determinarLadoPreferencial(ladoFrenteVazio);    
-    if (cabeNaFrente && (ladoPreferencial === "motorista" || !cabeAtras || !tras)) {
-      const lado = "motorista";
-      frente.larguraOcupada += monte.largura;
-      frente.larguraRestante -= monte.largura;
-      monte.lado = lado;
-      monte.alocado = true;
-      frente.montes.push(monte);
-      return compartimento;
-    }    
-    if (cabeAtras && tras) {
-      const lado = "ajudante";
-      tras.larguraOcupada += monte.largura;
-      tras.larguraRestante -= monte.largura;
-      monte.lado = lado;
-      monte.alocado = true;
-      tras.montes.push(monte);
-      return compartimento;
+    // Lógica específica para cavalete_3 (orientação vertical)
+    if (compartimento.id === "cavalete_3") {
+      const orientacaoMonte = determinarOrientacaoMonte(monte);
+      
+      // Para montes deitados, priorizar distribuição equilibrada entre frente e trás
+      if (orientacaoMonte === "deitado") {
+        const pesoFrente = frente.montes.reduce((total, m) => total + m.peso, 0);
+        const pesoTras = tras ? tras.montes.reduce((total, m) => total + m.peso, 0) : 0;
+        
+        // Calcular espaço disponível em cada lado
+        const espacoFrente = frente.larguraRestante;
+        const espacoTras = tras ? tras.larguraRestante : 0;
+        
+        // Estratégia: escolher o lado que oferece melhor distribuição
+        // Considerar peso, espaço disponível e quantidade de montes
+        let ladoEscolhido = null;
+        
+        if (cabeNaFrente && cabeAtras && tras) {
+          // Se cabe em ambos os lados, escolher o mais equilibrado
+          const qtdMontesFrente = frente.montes.length;
+          const qtdMontesTras = tras.montes.length;
+          
+          // Calcular fatores de desequilíbrio
+          const fatorEquilibrio = Math.abs(pesoFrente - pesoTras) / Math.max(pesoFrente, pesoTras, 1);
+          const fatorEspaco = Math.abs(espacoFrente - espacoTras) / Math.max(espacoFrente, espacoTras, 1);
+          const fatorQuantidade = Math.abs(qtdMontesFrente - qtdMontesTras) / Math.max(qtdMontesFrente, qtdMontesTras, 1);
+          
+          // Estratégia de distribuição equilibrada mais agressiva
+          if (fatorQuantidade > 0.2) {
+            // Se há desequilíbrio na quantidade de montes (>20%), priorizar o lado com menos montes
+            ladoEscolhido = qtdMontesFrente <= qtdMontesTras ? "frente" : "tras";
+          } else if (fatorEquilibrio > 0.2) {
+            // Se há desequilíbrio de peso (>20%), priorizar o lado mais leve
+            ladoEscolhido = pesoFrente <= pesoTras ? "frente" : "tras";
+          } else if (fatorEspaco > 0.2) {
+            // Se há desequilíbrio de espaço (>20%), priorizar o lado com mais espaço
+            ladoEscolhido = espacoFrente >= espacoTras ? "frente" : "tras";
+          } else {
+            // Caso contrário, forçar alternância entre os lados
+            // Se frente tem mais montes, vai para trás; se trás tem mais, vai para frente
+            ladoEscolhido = qtdMontesFrente > qtdMontesTras ? "tras" : "frente";
+          }
+        } else if (cabeNaFrente && cabeAtras && tras) {
+          // Se cabe em ambos os lados, forçar alternância
+          const qtdMontesFrente = frente.montes.length;
+          const qtdMontesTras = tras.montes.length;
+          ladoEscolhido = qtdMontesFrente <= qtdMontesTras ? "frente" : "tras";
+        } else if (cabeNaFrente) {
+          ladoEscolhido = "frente";
+        } else if (cabeAtras && tras) {
+          ladoEscolhido = "tras";
+        }
+        
+        // Alocar no lado escolhido
+        if (ladoEscolhido === "frente") {
+          monte.lado = "motorista";
+          frente.larguraOcupada += monte.largura;
+          frente.larguraRestante -= monte.largura;
+          monte.alocado = true;
+          frente.montes.push(monte);
+          return compartimento;
+        } else if (ladoEscolhido === "tras" && tras) {
+          monte.lado = "ajudante";
+          tras.larguraOcupada += monte.largura;
+          tras.larguraRestante -= monte.largura;
+          monte.alocado = true;
+          tras.montes.push(monte);
+          return compartimento;
+        }
+      } else {
+        // Para montes em pé, usar lógica padrão
+        const ladoPreferencial = determinarLadoPreferencial(ladoFrenteVazio);    
+        if (cabeNaFrente && (ladoPreferencial === "motorista" || !cabeAtras || !tras)) {
+          monte.lado = "motorista";
+          frente.larguraOcupada += monte.largura;
+          frente.larguraRestante -= monte.largura;
+          monte.alocado = true;
+          frente.montes.push(monte);
+          return compartimento;
+        }    
+        if (cabeAtras && tras) {
+          monte.lado = "ajudante";
+          tras.larguraOcupada += monte.largura;
+          tras.larguraRestante -= monte.largura;
+          monte.alocado = true;
+          tras.montes.push(monte);
+          return compartimento;
+        }
+      }
+    } else {
+      // Lógica padrão para outros compartimentos verticais
+      const ladoPreferencial = determinarLadoPreferencial(ladoFrenteVazio);    
+      if (cabeNaFrente && (ladoPreferencial === "motorista" || !cabeAtras || !tras)) {
+        monte.lado = "motorista";
+        frente.larguraOcupada += monte.largura;
+        frente.larguraRestante -= monte.largura;
+        monte.alocado = true;
+        frente.montes.push(monte);
+        return compartimento;
+      }    
+      if (cabeAtras && tras) {
+        monte.lado = "ajudante";
+        tras.larguraOcupada += monte.largura;
+        tras.larguraRestante -= monte.largura;
+        monte.alocado = true;
+        tras.montes.push(monte);
+        return compartimento;
+      }
     }
   }
   return null;
@@ -299,7 +389,7 @@ export function contarProdutosFilhos(
     monteFilho &&
     montesDoLado.find((monte) => monte.monteBase?.id === monteFilho?.id)
   ) {
-    contarProdutosFilhos(monteFilho, novaSoma, montesDoLado);
+    return contarProdutosFilhos(monteFilho, novaSoma, montesDoLado);
   }
   return novaSoma;
 }
@@ -343,7 +433,7 @@ function encontrarMelhorCombinacaoMontes(
   montesExistentes: Monte[],
   lado: LadoCompartimento,
   maximoDeItens: number,
-  maxCombinacoes: number = 4
+  maxCombinacoes: number = 10
 ): Monte[] | null {
   const montesOrdenados = [...montesExistentes].sort((a, b) => b.largura - a.largura);  
   const estadoOriginal = {
@@ -359,7 +449,7 @@ function encontrarMelhorCombinacaoMontes(
   for (let tamanho = 2; tamanho <= Math.min(maxCombinacoes, montesOrdenados.length); tamanho++) {
     const combinacoes = gerarCombinacoes(montesOrdenados, tamanho);    
     for (const combinacao of combinacoes) {
-      if (verificarSePodeSobreporMultiplos(monteNovo, combinacao, lado, maximoDeItens)) {
+      if (verificarSePodeSobreporMultiplos(monteNovo, combinacao, lado, 60)) {
         return combinacao;
       }      
       restaurarEstadoMonte(monteNovo, estadoOriginal);
@@ -377,6 +467,10 @@ function verificarSePodeSobreporMultiplos(
   if (montesExistentes.length === 0) {
     return false;
   }
+  
+  // Verificar regras de orientação dos montes
+  const orientacaoMonteNovo = determinarOrientacaoMonte(monteNovo);
+  
   for (const monteExistente of montesExistentes) {
     if (
       lado.montes.filter((monte) => monte.monteBase?.id === monteExistente.id)
@@ -384,7 +478,14 @@ function verificarSePodeSobreporMultiplos(
     ) {
       return false;
     }
+    
+    // Monte em pé só pode sobrepor outros montes em pé
+    const orientacaoMonteExistente = determinarOrientacaoMonte(monteExistente);
+    if (orientacaoMonteNovo === "emPe" && orientacaoMonteExistente === "deitado") {
+      return false;
+    }
   }
+  
   const larguraTotalMontesExistentes = montesExistentes.reduce((soma, monte) => 
     soma + monte.largura, 0
   );
@@ -399,9 +500,7 @@ function verificarSePodeSobreporMultiplos(
   if (totalItens > maximoDeItens) {
     return false;
   }
-  const temProdutosEspeciais = montesExistentes.some(monte => 
-    monte.produtos.some(prod => prod.precisaDeitado)
-  );
+  
   const estadoOriginal = {
     produtos: monteNovo.produtos.map(produto => ({
       ...produto,
@@ -412,18 +511,6 @@ function verificarSePodeSobreporMultiplos(
     altura: monteNovo.altura,
     largura: monteNovo.largura
   };
-  if (temProdutosEspeciais) {
-    monteNovo.produtos.forEach(produto => {
-      produto.precisaDeitado = true;
-      const larguraAntiga = produto.largura;
-      produto.largura = produto.altura;
-      produto.altura = larguraAntiga;
-    });    
-    const maiorAltura = Math.max(...monteNovo.produtos.map((item) => item.altura));
-    const larguraFinal = monteNovo.produtos.at(0)?.largura ?? 0;
-    monteNovo.altura = maiorAltura;
-    monteNovo.largura = larguraFinal;
-  }
 
   if (monteNovo.largura > larguraTotalMontesExistentes) {
     restaurarEstadoMonte(monteNovo, estadoOriginal);
@@ -463,6 +550,16 @@ function verificarSePodeSobrepor(
   ) {
     return false;
   }
+  
+  // Verificar regras de orientação dos montes
+  const orientacaoMonteNovo = determinarOrientacaoMonte(monteNovo);
+  const orientacaoMonteExistente = determinarOrientacaoMonte(monteExistente);
+  
+  // Monte em pé só pode sobrepor outro monte em pé
+  if (orientacaoMonteNovo === "emPe" && orientacaoMonteExistente === "deitado") {
+    return false;
+  }
+  
   const estadoOriginal = {
     produtos: monteNovo.produtos.map(produto => ({
       ...produto,
@@ -472,35 +569,7 @@ function verificarSePodeSobrepor(
     })),
     altura: monteNovo.altura,
     largura: monteNovo.largura
-  };
-  let precisouDeitar = false;
-  if (
-    monteExistente.produtos.filter((prod) => prod.precisaDeitado).length > 0
-  ) {
-    monteNovo.produtos.map((produto) => {
-      produto.precisaDeitado = true;
-      const larguraAntiga = produto.largura;
-      produto.largura = produto.altura;
-      produto.altura = larguraAntiga;
-    });
-    precisouDeitar = true;
-  }
-  const algumProdutoPrecisaDeitar = monteNovo.produtos.some(produto => produto.precisaDeitado);  
-  if (algumProdutoPrecisaDeitar) {
-    monteNovo.produtos.forEach(produto => {
-      produto.precisaDeitado = true;
-      const larguraAntiga = produto.largura;
-      produto.largura = produto.altura;
-      produto.altura = larguraAntiga;
-    });
-    precisouDeitar = true;
-  }
-  if (precisouDeitar) {
-    const maiorAltura = Math.max(...monteNovo.produtos.map((item) => item.altura));
-    const larguraFinal = monteNovo.produtos.at(0)?.largura ?? 0;
-    monteNovo.altura = maiorAltura;
-    monteNovo.largura = larguraFinal;
-  }
+  };  
   let larguraOk = true;
   if (monteNovo.largura > monteExistente.largura) {
     larguraOk = false;
@@ -522,7 +591,7 @@ function verificarSePodeSobrepor(
     tipoOk = true;
   }
   const resposta = totalItens <= maximoDeItens && tipoOk && larguraOk;
-  if (!resposta && precisouDeitar) {
+  if (!resposta) {
     restaurarEstadoMonte(monteNovo, estadoOriginal);
   }
   return resposta;
@@ -718,8 +787,8 @@ function sobreporMultiplos(
           monte, 
           lado.montes, 
           lado, 
-          32,
-          4
+          60,
+          10
         );
         if (melhorCombinacao) {
           monte.monteBase = melhorCombinacao[0];
@@ -773,29 +842,39 @@ function sobrepor(
   return null;
 }
 
+/**
+ * Determina se um monte está em pé ou deitado baseado nas dimensões dos produtos
+ */
+function determinarOrientacaoMonte(monte: Monte): "emPe" | "deitado" {
+  // Se todos os produtos precisam ser deitados, o monte é deitado
+  if (monte.produtos.every(produto => produto.precisaDeitado)) {
+    return "deitado";
+  }
+  
+  // Se algum produto tem dimensões que exigem posição deitada, o monte é deitado
+  for (const produto of monte.produtos) {
+    const maiorLado = Math.max(produto.altura, produto.largura);
+    const menorLado = Math.min(produto.altura, produto.largura);
+    if (maiorLado > 2450 || menorLado > 1200) {
+      return "deitado";
+    }
+  }
+  
+  return "emPe";
+}
+
 function separarPecasDeitadas(monte: Monte): { monteDeitado: Monte | null, monteEmPe: Monte | null } {
   const pecasDeitadas: ProdutoFormatado[] = [];
   const pecasEmPe: ProdutoFormatado[] = [];  
-  const produtosEmPe = monte.produtos.map(produto => {
-    if (produto.precisaDeitado) {
-      const larguraAntiga = produto.largura;
-      produto.largura = produto.altura;
-      produto.altura = larguraAntiga;
-      produto.precisaDeitado = false;
-    }    
+  const produtosEmPe = monte.produtos.map(produto => {      
     return produto;
   });  
   for (const produto of produtosEmPe) {
     const maiorLado = Math.max(produto.altura, produto.largura);
     const menorLado = Math.min(produto.altura, produto.largura);    
     if (maiorLado > 2450 || menorLado > 1200) {
-      const larguraAntiga = produto.largura;
-      produto.largura = produto.altura;
-      produto.altura = larguraAntiga;
-      produto.precisaDeitado = true;
       pecasDeitadas.push(produto);
     } else {
-      produto.precisaDeitado = false;
       pecasEmPe.push(produto);
     }
   }  
@@ -856,8 +935,8 @@ function distribuirMontesNosCavaletes(
   const pesoTotalDosMontes = montesNormais.reduce((pesoTotal, monte) => {
     return (pesoTotal += monte.peso);
   }, 0);
-  let montesOrdenados = montesNormais.sort((a, b) => a.peso - b.peso);
-  montesOrdenados = [...montesOrdenados, ...montesEspeciais];
+  // Ordenar todos os montes por peso para distribuição eficiente
+  const montesOrdenados = [...montesNormais.sort((a, b) => a.peso - b.peso), ...montesEspeciais];
   for (const monte of montesOrdenados) {
     let alocado = false;
     if (monte.largura <= 2200 && monte.especial) {
@@ -918,6 +997,7 @@ function tentarSobreposicaoFinal(
 ): {montesAlocados: Monte[], montesNaoAlocados: Monte[]} {
   const montesAlocados: Monte[] = [];
   const montesAindaNaoAlocados: Monte[] = [];  
+  // Ordenar por peso para distribuição eficiente
   const montesOrdenados = [...montesNaoAlocados].sort((a, b) => a.peso - b.peso);  
   for (const monte of montesOrdenados) {
     let alocado = false;    
@@ -960,7 +1040,7 @@ function tentarSobreposicaoFinal(
           for (const [ladoNome, lado] of lados) {
             const montesBase = lado.montes.filter(monte => !monte.monteBase);            
             if (montesBase.length >= 1) {
-              if (verificarSePodeSobreporMultiplos(monteDeitado, montesBase, lado, 50)) {
+              if (verificarSePodeSobreporMultiplos(monteDeitado, montesBase, lado, 60)) {
                 monteDeitado.monteBase = montesBase[0];
                 lado.montes.push(monteDeitado);
                 monteDeitado.alocado = true;
@@ -1068,15 +1148,13 @@ function tentarSobreposicaoFinal(
             }
           }
         }         
-         if (!conseguiuAlocarAlgum) {
-        }         
         if (!conseguiuAlocarAlgum) {
           for (const compartimento of compartimentos) {
             const lados = Object.entries(compartimento.lados);            
             for (const [ladoNome, lado] of lados) {
               const montesBase = lado.montes.filter(monte => !monte.monteBase);              
               if (montesBase.length >= 1) {
-                if (verificarSePodeSobreporMultiplos(monteEmPe, montesBase, lado, 34)) {
+                if (verificarSePodeSobreporMultiplos(monteEmPe, montesBase, lado, 60)) {
                   monteEmPe.monteBase = montesBase[0];
                   lado.montes.push(monteEmPe);
                   monteEmPe.alocado = true;
@@ -1099,6 +1177,7 @@ function tentarSobreposicaoFinal(
             }
             if (conseguiuAlocarAlgum) break;
           }        
+        }        
         if (!conseguiuAlocarAlgum) {
           for (const compartimento of compartimentos) {
             const lados = Object.entries(compartimento.lados);            
@@ -1142,8 +1221,8 @@ function tentarSobreposicaoFinal(
   }  
   return {montesAlocados, montesNaoAlocados: montesAindaNaoAlocados};
 }
-return {montesAlocados: [], montesNaoAlocados: []}
-}
+
+
 
 export function distribuirProdutos(
   produtos: ProdutoFormatado[]

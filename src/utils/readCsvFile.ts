@@ -51,9 +51,9 @@ export const readCsvFile = (
 
     const parsedData = lines
       .map((line) => line.split(separator).map((cell) => cell.trim()))
-      .filter((cols) => cols.length >= 7 && cols.slice(0, 7).some((c) => c));
+      .filter((cols) => cols.length >= 7 && cols.slice(0, 50).some((c) => c));
 
-    const trimmedData = parsedData.map((cols) => cols.slice(0, 7));
+    const trimmedData = parsedData.map((cols) => cols.slice(0, 50));
     const [headerRaw, ...rows] = trimmedData;
     const header = headerRaw.map((key) =>
       key === "cidade/uf" ? "cidade_uf" : key

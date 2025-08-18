@@ -40,7 +40,7 @@ export default function CarregamentoPage() {
       const produtosFormatados = formatarProdutos(jsonArray);
       const {compartimentos, montesAlocados, montesNaoAlocados} =
         distribuirProdutos(produtosFormatados);
-      compartimentos.forEach((comp) => organizarMontesPorEmpilhamento(comp));
+      compartimentos.forEach((comp: Compartimento) => organizarMontesPorEmpilhamento(comp));
       // console.log("produtosFormatados", produtosFormatados);
       setCompartimentoComProdutos(compartimentos);
       setMontesNaoAlocados(montesNaoAlocados);

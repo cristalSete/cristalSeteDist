@@ -1,14 +1,22 @@
 import {GlassType} from "@/utils/distribuicaoLogistica";
 
 export interface ProdutoEntrada {
-  id: string;
-  cliente: string;
-  pedido: string;
-  produto: string;
-  quantidade: string;
-  peso: string;
-  cidade_uf: string;
-  dimensoes: string;
+  Cliente: string;
+  "Pedido Cliente": string;
+  Produto: string;
+  "Produto Descrição"?: string;
+  "Tipo Produto Descrição"?: string;
+  Qtde: string;
+  Largura: string;
+  "Peso Total": string;
+  Altura: string;
+  "Sequência": string;
+  Cidade: string;
+  M2?: string;
+  "M2 Total"?: string;
+  "Pedido/Item/Peça"?: string;
+  Projeto?: string;
+  Roteiro?: string;
 }
 export interface ProdutoFormatado {
   id: string;
@@ -16,6 +24,7 @@ export interface ProdutoFormatado {
   pedido: string;
   produto: string;
   quantidade: number;
+  sequencia: number;
   peso: number;
   cidade_uf: string;
   largura: number;
@@ -46,12 +55,22 @@ export interface Monte {
 }
 
 export interface CsvProduto {
-  cliente: string;
-  pedido: string;
-  produto: string;
-  quantidade: string;
-  peso: string;
-  cidade_uf: string;
+  Cliente: string;
+  "Pedido Cliente": string;
+  Produto: string;
+  "Produto Descrição"?: string;
+  "Tipo Produto Descrição"?: string;
+  Qtde: string;
+  Largura: string;
+  "Peso Total": string;
+  Altura: string;
+  "Sequência": string;
+  Cidade: string;
+  M2?: string;
+  "M2 Total"?: string;
+  "Pedido/Item/Peça"?: string;
+  Projeto?: string;
+  Roteiro?: string;
 }
 
 export interface Resumo {
