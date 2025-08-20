@@ -6,6 +6,7 @@ export enum TipoVidro {
   laminadoComum = "Laminado Comum",
   molde = "Molde",
   ecoGlass = "Eco Glass",
+  ekoGlass = "EKO",
   laminadoTemperado = "Laminado Temperado",
   tm = "TM",
   tm1 = "TM1",
@@ -17,8 +18,9 @@ export enum TipoVidro {
   tm3ref = "TM3REF",
   tm4ref = "TM4REF",
   tm5escd = "TM5ESCD",
-  espelho = "Espelho"
-
+  espelho = "Espelho",
+  kit = "KIT",
+  lcfx = "LCFX"
 }
 
 export function pegarTipoVidro(produto: string): TipoVidro {
@@ -36,6 +38,9 @@ export function pegarTipoVidro(produto: string): TipoVidro {
   if (nome.includes(TipoVidro.tm4.toLowerCase())) return TipoVidro.tm4;
   if (nome.includes(TipoVidro.tm.toLowerCase())) return TipoVidro.tm;
   if (nome.includes(TipoVidro.pvb.toLowerCase())) return TipoVidro.pvb;
+  if (nome.includes(TipoVidro.ekoGlass.toLowerCase())) return TipoVidro.ekoGlass;
+  if (nome.includes(TipoVidro.lcfx.toLowerCase())) return TipoVidro.lcfx;
+  if (nome.includes(TipoVidro.kit.toLowerCase())) return TipoVidro.kit;
   if (nome.includes(TipoVidro.vidroTemperado.toLowerCase())) return TipoVidro.vidroTemperado;
   if (nome.includes(TipoVidro.laminadoComum.toLowerCase())) return TipoVidro.laminadoComum;
   if (nome.includes(TipoVidro.molde.toLowerCase())) return TipoVidro.molde;
@@ -44,37 +49,6 @@ export function pegarTipoVidro(produto: string): TipoVidro {
   
   return TipoVidro.vidroTemperado;
 }
-
-/**
- * largura é sempre menor que a altura
- */
-// export function pegarDimensoes(dimensoes: string): {
-//   largura: number;
-//   altura: number;
-//   precisaDeitado: boolean;
-// } {
-//   const [larguraStr, alturaStr] = dimensoes.replace(/\s+/g, "").split("x");
-
-//   const larguraNum = parseInt(larguraStr, 10) || 0;
-//   const alturaNum = parseInt(alturaStr, 10) || 0;
-
-//   // se passar de 2450 de altura, a altura vira largura e a largura vira altura (deitar a peça)
-//   if (precisaDeitar(alturaNum, larguraNum)) {
-//     return {
-//       largura: Math.max(larguraNum, alturaNum),
-//       altura: Math.min(larguraNum, alturaNum),
-//       precisaDeitado: true,
-//     };
-//   }
-
-//   // largura é sempre menor que a altura
-//   // altura é sempre maior que a largura
-//   return {
-//     largura: Math.min(larguraNum, alturaNum),
-//     altura: Math.max(larguraNum, alturaNum),
-//     precisaDeitado: false,
-//   };
-// }
 
 export function precisaDeitar(altura: number, largura: number, tipo: TipoVidro): boolean {
   // se um dos lados for > 2450 precisa deitar
@@ -110,7 +84,7 @@ function extrairIdENomeCliente(cliente: string): { id: string; nome: string } {
 export function pegarInformacoesProduto(
   data: CsvProduto[]
 ): ProdutoFormatado[] {
-  const tiposEspeciais = [TipoVidro.ecoGlass, TipoVidro.molde, TipoVidro.pvb, TipoVidro.laminadoComum, TipoVidro.laminadoTemperado, TipoVidro.espelho];
+  const tiposEspeciais = [TipoVidro.ecoGlass, TipoVidro.molde, TipoVidro.pvb, TipoVidro.laminadoComum, TipoVidro.laminadoTemperado, TipoVidro.espelho, TipoVidro.ekoGlass, TipoVidro.lcfx];
 
   return data.flatMap((item) => {
     item.Produto += " " + (item["Produto Descrição"] || item["Tipo Produto Descrição"]);
@@ -132,7 +106,7 @@ export function pegarInformacoesProduto(
     }
     const especial = tiposEspeciais.includes(tipo);
 
-    if(largura === 0 || altura === 0) {
+    if(largura === 0 || altura === 0 || tipo === TipoVidro.kit) {
       return [];
     }
 
