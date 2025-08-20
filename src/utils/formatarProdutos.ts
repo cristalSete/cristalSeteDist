@@ -4,6 +4,7 @@ export enum TipoVidro {
   pvb = "PVB",
   vidroTemperado = "Temperado",
   laminadoComum = "Laminado Comum",
+  comum = "Comum",
   molde = "Molde",
   ecoGlass = "Eco Glass",
   ekoGlass = "EKO",
@@ -46,6 +47,7 @@ export function pegarTipoVidro(produto: string): TipoVidro {
   if (nome.includes(TipoVidro.molde.toLowerCase())) return TipoVidro.molde;
   if (nome.includes(TipoVidro.ecoGlass.toLowerCase())) return TipoVidro.ecoGlass;
   if (nome.includes(TipoVidro.laminadoTemperado.toLowerCase())) return TipoVidro.laminadoTemperado;
+  if (nome.includes(TipoVidro.comum.toLowerCase())) return TipoVidro.comum;
   
   return TipoVidro.vidroTemperado;
 }
@@ -84,7 +86,7 @@ function extrairIdENomeCliente(cliente: string): { id: string; nome: string } {
 export function pegarInformacoesProduto(
   data: CsvProduto[]
 ): ProdutoFormatado[] {
-  const tiposEspeciais = [TipoVidro.ecoGlass, TipoVidro.molde, TipoVidro.pvb, TipoVidro.laminadoComum, TipoVidro.laminadoTemperado, TipoVidro.espelho, TipoVidro.ekoGlass, TipoVidro.lcfx];
+  const tiposEspeciais = [TipoVidro.ecoGlass, TipoVidro.molde, TipoVidro.pvb, TipoVidro.laminadoComum, TipoVidro.laminadoTemperado, TipoVidro.espelho, TipoVidro.ekoGlass, TipoVidro.lcfx, TipoVidro.comum];
 
   return data.flatMap((item) => {
     item.Produto += " " + (item["Produto Descrição"] || item["Tipo Produto Descrição"]);

@@ -88,6 +88,9 @@ export const MonteCard = ({
       <div className="text-sm">Largura do monte: {monte.largura}mm</div>
       <div className="text-sm">Total de produtos: {totalProdutos}</div>
       <div className="text-sm">Lado: {monte.lado}</div>
+      <div className="text-xs italic text-gray-500">
+        {monte.produtos[0].precisaDeitado ? "Deitado" : "Em pé"}
+      </div>
 
       {/* {monte.monteBase && (
         <div className="text-sm bg-green-200 px-1">
