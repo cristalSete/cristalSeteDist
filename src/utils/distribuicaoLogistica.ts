@@ -506,7 +506,7 @@ function encontrarMelhorCombinacaoMontes(
   
   // Filtrar montes que não podem mais ser sobrepostos e que são montes base (não sobrepostos)
   const montesDisponiveis = montesExistentes.filter(m => 
-    !(m as Monte & { naoPodeSerSobreposto?: boolean }).naoPodeSerSobreposto &&
+    !m.naoPodeSerSobreposto &&
     !m.monteBase // Apenas montes base podem ser usados para sobreposição múltipla
   );
   
@@ -560,7 +560,7 @@ function verificarSePodeSobreporMultiplos(
     }
     
     // Verificar se o monte existente não pode mais ser sobreposto
-    if ((monteExistente as Monte & { naoPodeSerSobreposto?: boolean }).naoPodeSerSobreposto) {
+    if (monteExistente.naoPodeSerSobreposto) {
       return false;
     }
     
@@ -574,14 +574,13 @@ function verificarSePodeSobreporMultiplos(
   const larguraTotalMontesExistentes = montesExistentes.reduce((soma, monte) => 
     soma + monte.largura, 0
   );
-  let maiorQuantidadeProdutos = 0;
+  // CORREÇÃO: Somar TODOS os produtos dos montes existentes, não apenas o maior
+  let totalProdutosExistentes = 0;
   for (const monteExistente of montesExistentes) {
     const quantidadeProdutos = contarProdutosNosMontes(monteExistente);
-    if (quantidadeProdutos > maiorQuantidadeProdutos) {
-      maiorQuantidadeProdutos = quantidadeProdutos;
-    }
+    totalProdutosExistentes += quantidadeProdutos;
   }
-  const totalItens = maiorQuantidadeProdutos + monteNovo.produtos.length;
+  const totalItens = totalProdutosExistentes + monteNovo.produtos.length;
   if (totalItens > maximoDeItens) {
     return false;
   }
@@ -632,6 +631,13 @@ function verificarSePodeSobreporMultiplos(
     restaurarEstadoMonte(monteNovo, estadoOriginal);
     return false;
   }
+  
+  // REGRA ESPECIAL: Monte normal NÃO pode sobrepor conjunto que contém montes especiais
+  const temMontesEspeciais = montesExistentes.some(monte => monte.especial);
+  if (!monteNovo.especial && temMontesEspeciais) {
+    restaurarEstadoMonte(monteNovo, estadoOriginal);
+    return false;
+  }
   return true;
 }
 
@@ -651,7 +657,7 @@ function verificarSePodeSobrepor(
   }
   
   // Verificar se o monte existente não pode mais ser sobreposto
-  if ((monteExistente as Monte & { naoPodeSerSobreposto?: boolean }).naoPodeSerSobreposto) {
+  if (monteExistente.naoPodeSerSobreposto) {
     return false;
   }
   
@@ -699,6 +705,12 @@ function verificarSePodeSobrepor(
   if (!monteExistente.especial && !monteNovo.especial) {
     tipoOk = true;
   }
+  
+  // REGRA ESPECIAL: Monte normal NÃO pode sobrepor monte especial
+  // (mesmo que o monte especial não tenha a flag naoPodeSerSobreposto)
+  if (monteExistente.especial && !monteNovo.especial) {
+    tipoOk = false;
+  }
   const resposta = totalItens <= maximoDeItens && tipoOk && larguraOk;
   if (!resposta) {
     restaurarEstadoMonte(monteNovo, estadoOriginal);
@@ -706,27 +718,55 @@ function verificarSePodeSobrepor(
   return resposta;
 }
 
+/**
+ * Conta TODOS os produtos no lado do meio, incluindo sobreposições
+ * REGRA SIMPLES: Para o meio, contar TODOS os produtos sem considerar duplicação
+ * porque produtos diferentes devem ser contados mesmo que tenham características similares
+ */
+function contarTodosProdutosNoMeio(ladoMeio: { montes: Monte[] }): number {
+  let total = 0;
+  
+  // Pegar todos os montes (base e sobrepostos)
+  const todosMontes = ladoMeio.montes || [];
+  
+  // Contar TODOS os produtos diretamente, sem verificação de duplicação
+  for (const monte of todosMontes) {
+    total += monte.produtos?.length || 0;
+  }
+  
+  console.log(`DEBUG: Meio tem ${total} produtos totais de ${todosMontes.length} montes`);
+  return total;
+}
+
+/**
+ * Verifica se é possível adicionar um monte ao meio respeitando o limite máximo de 12 itens sobrepostos
+ * REGRA: O meio pode ter no máximo 12 itens contando todos os montes sobrepostos
+ */
 function verificarFlexibilidadeMeio(
   monteNovo: Monte,
   compartimento: Compartimento
 ): boolean {
   const ladoMeio = compartimento?.lados.meio;
-  const ladoTras = compartimento?.lados.tras;  
   if (!ladoMeio) {
     return false;
   }  
-  let totalProdutosMeio = 0;
-  for (const monte of ladoMeio.montes) {
-    totalProdutosMeio += contarProdutosNosMontes(monte);
-  }  
-  let totalProdutosTras = 0;
-  if (ladoTras) {
-    for (const monte of ladoTras.montes) {
-      totalProdutosTras += contarProdutosNosMontes(monte);
-    }
-  }  
-  const totalProdutos = totalProdutosMeio + totalProdutosTras + monteNovo.produtos.length;  
-  return totalProdutos <= 12;
+  
+  // Contar todos os produtos já presentes no meio (incluindo sobreposições)
+  const totalProdutosMeio = contarTodosProdutosNoMeio(ladoMeio);
+  
+  // Verificar se adicionar o novo monte ultrapassaria o limite de 12
+  const totalComNovoMonte = totalProdutosMeio + monteNovo.produtos.length;
+  
+  console.log(`DEBUG: ${compartimento.id} - Meio atual: ${totalProdutosMeio}, Novo monte: ${monteNovo.produtos.length}, Total: ${totalComNovoMonte}`);
+  
+  // LIMITE RÍGIDO: máximo 12 itens no meio
+  if (totalComNovoMonte > 12) {
+    console.log(`DEBUG: REJEITADO - Excede limite de 12 itens no meio`);
+    return false;
+  }
+  
+  console.log(`DEBUG: ACEITO - Dentro do limite de 12 itens`);
+  return true;
 }
 
 function posicionarNoMeio(
@@ -765,27 +805,52 @@ function posicionarNoMeio(
         compartimento.lados.meio = lado;
         return compartimento;
       }      
+      // Verificar se ainda há espaço para sobrepor (limite de 12 itens no meio)
+      if (!verificarFlexibilidadeMeio(monte, compartimento)) {
+        return null;
+      }
+      
       // Se existe cadeia ativa, APENAS tentar sobrepor no topo da cadeia
       if (lado.cadeiaAlvoId) {
         const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
         if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, 12)) {
-          monte.monteBase = topo;
-          monte.alocado = true;
-          lado.montes.push(monte);
-          compartimento.pesoTotal += monte.peso;
-          compartimento.lados.meio = lado;
-          return compartimento;
+          // VERIFICAÇÃO ADICIONAL: Para o meio, verificar limite total após sobreposição
+          lado.montes.push(monte); // Temporariamente adicionar para teste
+          const totalAposAdicao = contarTodosProdutosNoMeio(lado);
+          lado.montes.pop(); // Remover para não afetar o estado
+          
+          if (totalAposAdicao <= 12) {
+            monte.monteBase = topo;
+            monte.alocado = true;
+            lado.montes.push(monte);
+            compartimento.pesoTotal += monte.peso;
+            compartimento.lados.meio = lado;
+            console.log(`DEBUG: Sobreposição na cadeia do meio ACEITA - Total final: ${totalAposAdicao}`);
+            return compartimento;
+          } else {
+            console.log(`DEBUG: Sobreposição na cadeia do meio REJEITADA - Total seria: ${totalAposAdicao}`);
+          }
         }
       } else {
         // Se não há cadeia ativa, pode tentar sobrepor em qualquer monte
         for (const monteExistente of lado.montes) {
           if (verificarSePodeSobrepor(monte, monteExistente, lado, 12)) {
-            monte.monteBase = monteExistente;
-            monte.alocado = true;
-            lado.montes.push(monte);
-            compartimento.pesoTotal += monte.peso;
-            compartimento.lados.meio = lado;
-            return compartimento;
+            // VERIFICAÇÃO ADICIONAL: Para o meio, verificar limite total após sobreposição
+            lado.montes.push(monte); // Temporariamente adicionar para teste
+            const totalAposAdicao = contarTodosProdutosNoMeio(lado);
+            lado.montes.pop(); // Remover para não afetar o estado
+            
+            if (totalAposAdicao <= 12) {
+              monte.monteBase = monteExistente;
+              monte.alocado = true;
+              lado.montes.push(monte);
+              compartimento.pesoTotal += monte.peso;
+              compartimento.lados.meio = lado;
+              console.log(`DEBUG: Sobreposição no meio ACEITA - Total final: ${totalAposAdicao}`);
+              return compartimento;
+            } else {
+              console.log(`DEBUG: Sobreposição no meio REJEITADA - Total seria: ${totalAposAdicao}`);
+            }
           }
         }
       }
@@ -920,7 +985,9 @@ function sobreporMultiplos(
       // Se já existe uma cadeia definida neste lado, tentar continuar nela
       if (lado.cadeiaAlvoId) {
         const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
-        if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, 60)) {
+        // Usar limite específico baseado no lado (12 para meio, 60 para outros)
+        const limiteItens = ladoNome === "meio" ? 12 : 60;
+        if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, limiteItens)) {
           monte.monteBase = topo;
           lado.montes.push(monte);
           monte.alocado = true;
@@ -934,11 +1001,13 @@ function sobreporMultiplos(
 
       // Não há cadeia ainda: criar a primeira cadeia via sobreposição múltipla
       if (lado.montes.length >= 2) {
+        // Usar limite específico baseado no lado (12 para meio, 60 para outros)
+        const limiteItens = ladoNome === "meio" ? 12 : 60;
         const melhorCombinacao = encontrarMelhorCombinacaoMontes(
           monte,
           lado.montes,
           lado,
-          60,
+          limiteItens,
           10,
           compartimento
         );
@@ -974,6 +1043,331 @@ function sobreporMultiplos(
   return null;
 }
 
+/**
+ * Função específica para sobrepor montes especiais após falha na alocação no meio
+ * Permite que montes especiais sejam sobrepostos a montes normais ou especiais
+ * e protege esses montes especiais de serem sobrepostos por montes normais posteriormente
+ * 
+ * RESPEITA O SISTEMA DE CADEIA:
+ * 1. Se existe cadeiaAlvoId, SEMPRE segue a cadeia existente
+ * 2. Se não existe cadeia, tenta sobreposição simples primeiro
+ * 3. Como último recurso, cria nova cadeia via sobreposição múltipla
+ */
+function sobreporMonteEspecial(
+  monteEspecial: Monte,
+  compartimentosOrdenados: Compartimento[]
+): Compartimento | null {
+  if (!monteEspecial.especial) {
+    return null; // Esta função é apenas para montes especiais
+  }
+
+  for (const compartimento of compartimentosOrdenados) {
+    const lados = ladosBalanceados(compartimento, monteEspecial);
+    for (const [ladoNome, lado] of lados) {
+      
+      // Se existe cadeia de sobreposição múltipla, SEMPRE seguir ela primeiro
+      if (lado.cadeiaAlvoId) {
+        const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
+        // Usar limite específico baseado no lado (12 para meio, 32 para outros)
+        const limiteItens = ladoNome === "meio" ? 12 : 32;
+        if (topo && verificarSePodeMonteEspecialSobrepor(monteEspecial, topo, lado, limiteItens)) {
+          monteEspecial.monteBase = topo;
+          lado.montes.push(monteEspecial);
+          monteEspecial.alocado = true;
+          compartimento.pesoTotal += monteEspecial.peso;
+          
+          // Proteger o monte especial de ser sobreposto por montes normais
+          monteEspecial.naoPodeSerSobreposto = true;
+          
+          // Atualizar o lado no compartimento
+          if (ladoNome === "frente") compartimento.lados.frente = lado;
+          if (ladoNome === "tras") compartimento.lados.tras = lado;
+          if (ladoNome === "meio") compartimento.lados.meio = lado;
+          
+          return compartimento;
+        }
+        // Se não conseguiu sobrepor na cadeia, NÃO tentar em outros montes
+        continue;
+      }
+
+      // Não há cadeia ainda: procurar por montes base para sobreposição simples
+      const montesBase = lado.montes.filter(monte => 
+        !monte.monteBase && // Apenas montes base
+        !monte.naoPodeSerSobreposto // Que não estão protegidos
+      );
+
+      // Primeiro tentar sobreposição simples
+      for (const monteBase of montesBase) {
+        // Usar limite específico baseado no lado (12 para meio, 32 para outros)
+        const limiteItens = ladoNome === "meio" ? 12 : 32;
+        // Verificar se pode sobrepor este monte base
+        if (verificarSePodeMonteEspecialSobrepor(monteEspecial, monteBase, lado, limiteItens)) {
+          // Alocar o monte especial sobre o monte base
+          monteEspecial.monteBase = monteBase;
+          lado.montes.push(monteEspecial);
+          monteEspecial.alocado = true;
+          compartimento.pesoTotal += monteEspecial.peso;
+          
+          // Proteger o monte especial de ser sobreposto por montes normais
+          monteEspecial.naoPodeSerSobreposto = true;
+          
+          // Atualizar o lado no compartimento
+          if (ladoNome === "frente") compartimento.lados.frente = lado;
+          if (ladoNome === "tras") compartimento.lados.tras = lado;
+          if (ladoNome === "meio") compartimento.lados.meio = lado;
+          
+          return compartimento;
+        }
+      }
+
+      // Se não conseguiu sobrepor individualmente, tentar sobreposição múltipla
+      if (montesBase.length >= 2) {
+        // Usar limite específico baseado no lado (12 para meio, 60 para outros)
+        const limiteItensMultiplos = ladoNome === "meio" ? 12 : 60;
+        const melhorCombinacao = encontrarMelhorCombinacaoMontesParaEspecial(
+          monteEspecial,
+          montesBase,
+          lado,
+          limiteItensMultiplos,
+          10,
+          compartimento
+        );
+        
+        if (melhorCombinacao) {
+          // Verificar se a largura total dos montes base não excede a largura do compartimento
+          const larguraTotalMontesBase = melhorCombinacao.reduce((soma, monte) => soma + monte.largura, 0);
+          const larguraMaximaCompartimento = lado.larguraRestante + lado.larguraOcupada; // Largura total do lado
+          
+          if (larguraTotalMontesBase <= larguraMaximaCompartimento) {
+            // Escolher como raiz da cadeia o monte com maior quantidade de produtos
+            let escolhido = melhorCombinacao[0];
+            let maiorQtd = contarProdutosNosMontes(escolhido);
+            for (const m of melhorCombinacao) {
+              const qtd = contarProdutosNosMontes(m);
+              if (qtd > maiorQtd) { maiorQtd = qtd; escolhido = m; }
+            }
+            
+            const raizId = obterIdRaizDaCadeia(escolhido);
+            lado.cadeiaAlvoId = raizId;
+            const topo = obterTopoDaCadeia(lado, raizId) || escolhido;
+            
+            monteEspecial.monteBase = topo;
+            lado.montes.push(monteEspecial);
+            monteEspecial.alocado = true;
+            compartimento.pesoTotal += monteEspecial.peso;
+            
+            // Proteger o monte especial de ser sobreposto por montes normais
+            monteEspecial.naoPodeSerSobreposto = true;
+            
+            // Atualizar o lado no compartimento
+            if (ladoNome === "frente") compartimento.lados.frente = lado;
+            if (ladoNome === "tras") compartimento.lados.tras = lado;
+            if (ladoNome === "meio") compartimento.lados.meio = lado;
+            
+            return compartimento;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Função auxiliar para encontrar a melhor combinação de montes para sobreposição especial
+ */
+function encontrarMelhorCombinacaoMontesParaEspecial(
+  monteEspecial: Monte,
+  montesExistentes: Monte[],
+  lado: LadoCompartimento,
+  maximoDeItens: number,
+  maxCombinacoes: number = 10,
+  compartimento?: Compartimento
+): Monte[] | null {
+  if (montesExistentes.length < 2) {
+    return null;
+  }
+  
+  // Se já existe uma cadeia ativa, NÃO permitir criar nova sobreposição múltipla
+  if (lado.cadeiaAlvoId) {
+    return null;
+  }
+  
+  // Filtrar montes que não podem mais ser sobrepostos e que são montes base
+  const montesDisponiveis = montesExistentes.filter(m => 
+    !m.naoPodeSerSobreposto &&
+    !m.monteBase
+  );
+  
+  if (montesDisponiveis.length < 2) {
+    return null;
+  }
+  
+  const montesOrdenados = [...montesDisponiveis].sort((a, b) => b.largura - a.largura);  
+  const estadoOriginal = {
+    produtos: monteEspecial.produtos.map(produto => ({
+      ...produto,
+      largura: produto.largura,
+      altura: produto.altura,
+      precisaDeitado: produto.precisaDeitado
+    })),
+    altura: monteEspecial.altura,
+    largura: monteEspecial.largura
+  };  
+  
+  for (let tamanho = 2; tamanho <= Math.min(maxCombinacoes, montesOrdenados.length); tamanho++) {
+    const combinacoes = gerarCombinacoes(montesOrdenados, tamanho);    
+    for (const combinacao of combinacoes) {
+      if (verificarSePodeMonteEspecialSobreporMultiplos(monteEspecial, combinacao, lado, maximoDeItens, compartimento)) {
+        return combinacao;
+      }      
+      restaurarEstadoMonte(monteEspecial, estadoOriginal);
+    }
+  }
+  return null;
+}
+
+/**
+ * Verifica se um monte especial pode sobrepor outro monte (regras mais flexíveis)
+ */
+function verificarSePodeMonteEspecialSobrepor(
+  monteEspecial: Monte,
+  monteExistente: Monte,
+  lado: LadoCompartimento,
+  maximoDeItens: number
+): boolean {
+  if (!monteEspecial.especial) {
+    return false; // Esta função é apenas para montes especiais
+  }
+
+  // Verificar se já existe sobreposição neste monte
+  if (lado.montes.filter((monte) => monte.monteBase?.id === monteExistente.id).length > 0) {
+    return false;
+  }
+  
+  // Verificar se o monte existente não pode mais ser sobreposto
+  if (monteExistente.naoPodeSerSobreposto) {
+    return false;
+  }
+  
+  // Verificar regras de orientação dos montes
+  const orientacaoMonteEspecial = determinarOrientacaoMonte(monteEspecial);
+  const orientacaoMonteExistente = determinarOrientacaoMonte(monteExistente);
+  
+  // Monte em pé só pode sobrepor outro monte em pé
+  if (orientacaoMonteEspecial === "emPe" && orientacaoMonteExistente === "deitado") {
+    return false;
+  }
+  
+  const produtosContadosNoMonte = contarProdutosNosMontes(monteExistente);
+  const totalItens = produtosContadosNoMonte + monteEspecial.produtos.length;
+  
+  // Para montes especiais, permitir sobreposição mesmo que seja mais largo
+  // (regra mais flexível que a sobreposição normal)
+  
+  // Verificar limites de produtos
+  const temPVBNoMonteExistente = monteExistente.produtos.some(produto => produto.tipo === "PVB");  
+  if (temPVBNoMonteExistente && monteExistente.especial) {
+    const maximoComPVB = 12;
+    if (totalItens > maximoComPVB) {
+      return false;
+    }
+  }
+  
+  // Monte especial pode sobrepor tanto monte especial quanto normal
+  return totalItens <= maximoDeItens;
+}
+
+/**
+ * Verifica se um monte especial pode sobrepor múltiplos montes (regras mais flexíveis)
+ */
+function verificarSePodeMonteEspecialSobreporMultiplos(
+  monteEspecial: Monte,
+  montesExistentes: Monte[],
+  lado: LadoCompartimento,
+  maximoDeItens: number,
+  compartimento?: Compartimento
+): boolean {
+  if (!monteEspecial.especial || montesExistentes.length === 0) {
+    return false;
+  }
+  
+  // Verificar regras de orientação dos montes
+  const orientacaoMonteEspecial = determinarOrientacaoMonte(monteEspecial);
+  
+  for (const monteExistente of montesExistentes) {
+    if (lado.montes.filter((monte) => monte.monteBase?.id === monteExistente.id).length > 0) {
+      return false;
+    }
+    
+    // Verificar se o monte existente não pode mais ser sobreposto
+    if (monteExistente.naoPodeSerSobreposto) {
+      return false;
+    }
+    
+    // Monte em pé só pode sobrepor outros montes em pé
+    const orientacaoMonteExistente = determinarOrientacaoMonte(monteExistente);
+    if (orientacaoMonteEspecial === "emPe" && orientacaoMonteExistente === "deitado") {
+      return false;
+    }
+  }
+  
+  // CORREÇÃO: Somar TODOS os produtos dos montes existentes, não apenas o maior
+  let totalProdutosExistentes = 0;
+  for (const monteExistente of montesExistentes) {
+    const quantidadeProdutos = contarProdutosNosMontes(monteExistente);
+    totalProdutosExistentes += quantidadeProdutos;
+  }
+  
+  const totalItens = totalProdutosExistentes + monteEspecial.produtos.length;
+  if (totalItens > maximoDeItens) {
+    return false;
+  }
+  
+  const estadoOriginal = {
+    produtos: monteEspecial.produtos.map(produto => ({
+      ...produto,
+      largura: produto.largura,
+      altura: produto.altura,
+      precisaDeitado: produto.precisaDeitado
+    })),
+    altura: monteEspecial.altura,
+    largura: monteEspecial.largura
+  };
+
+  // Para montes especiais, usar regras mais flexíveis de largura
+  if (compartimento && compartimento.id === "cavalete_3") {
+    // Para cavalete_3, usar a largura total do lado como referência
+    const larguraTotalCompartimento = lado.larguraRestante + lado.larguraOcupada;
+    if (monteEspecial.largura > larguraTotalCompartimento) {
+      restaurarEstadoMonte(monteEspecial, estadoOriginal);
+      return false;
+    }
+  } else {
+    // Para outros compartimentos, permitir largura até o limite do compartimento
+    const larguraTotalCompartimento = lado.larguraRestante + lado.larguraOcupada;
+    if (monteEspecial.largura > larguraTotalCompartimento) {
+      restaurarEstadoMonte(monteEspecial, estadoOriginal);
+      return false;
+    }
+  }
+  
+  // Verificar PVB
+  const temPVBNosMontesExistentes = montesExistentes.some(monte => 
+    monte.produtos.some(produto => produto.tipo === "PVB")
+  );
+  
+  if (temPVBNosMontesExistentes) {
+    const maximoComPVB = 25;
+    if (totalItens > maximoComPVB) {
+      restaurarEstadoMonte(monteEspecial, estadoOriginal);
+      return false;
+    }
+  }
+  
+  return true;
+}
+
 function sobrepor(
   monte: Monte,
   compartimentosOrdenados: Compartimento[]
@@ -984,7 +1378,9 @@ function sobrepor(
       // Se existe cadeia de sobreposição múltipla, SEMPRE seguir ela
       if (lado.cadeiaAlvoId) {
         const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
-        if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, 32)) {
+        // Usar limite específico baseado no lado (12 para meio, 32 para outros)
+        const limiteItens = ladoNome === "meio" ? 12 : 32;
+        if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, limiteItens)) {
           monte.monteBase = topo;
           lado.montes.push(monte);
           monte.alocado = true;
@@ -1000,7 +1396,9 @@ function sobrepor(
 
       // Sobreposição simples: independente, não usa cadeiaAlvoId
       for (const monteExistente of lado.montes) {
-        if (verificarSePodeSobrepor(monte, monteExistente, lado, 32)) {
+        // Usar limite específico baseado no lado (12 para meio, 32 para outros)
+        const limiteItens = ladoNome === "meio" ? 12 : 32;
+        if (verificarSePodeSobrepor(monte, monteExistente, lado, limiteItens)) {
           monte.monteBase = monteExistente;
           lado.montes.push(monte);
           monte.alocado = true;
@@ -1107,14 +1505,21 @@ function tentarAgruparMontesNoMesmoCavalete(
     const montesPorLado: Map<string, {lado: string, monte: Monte}> = new Map(); // Rastrear onde cada monte foi alocado
     let todosAlocados = true;
     
+    // CORREÇÃO: Para agrupamento, usar sempre o compartimento REAL para verificações do meio
+    // Isso garante que a contagem de produtos existentes seja correta
+    
     // Tentar alocar todos os montes neste compartimento DE TESTE
     for (const monte of montes) {
       let alocado = false;
       
       // 1. Montes especiais no meio
       if (monte.largura <= 2200 && monte.especial) {
-        const compartimentoAtualizado = colocarNoMeio(monte, [compartimentoTeste]);
+        // CORREÇÃO: Para o meio, usar o compartimento REAL para verificar limites corretamente
+        const compartimentoAtualizado = colocarNoMeio(monte, [compartimento]);
         if (compartimentoAtualizado) {
+          // Aplicar as mudanças ao compartimento de teste
+          compartimentoTeste.lados.meio = JSON.parse(JSON.stringify(compartimentoAtualizado.lados.meio));
+          compartimentoTeste.pesoTotal = compartimentoAtualizado.pesoTotal;
           montesAlocados.push(monte);
           montesPorLado.set(monte.id, {lado: "meio", monte});
           alocado = true;
@@ -1249,6 +1654,17 @@ function distribuirMontesNosCavaletes(
       // 1. Primeiro tentar colocar no meio (montes especiais)
       if (monte.largura <= 2200 && monte.especial) {
         if (colocarNoMeio(monte, compartimentosOrdenados)) {
+          alocado = true;
+        }
+      }
+      
+      // 1.1. Se não conseguiu alocar no meio, tentar sobreposição especial (apenas para montes especiais)
+      if (!alocado && monte.especial) {
+        const compartimentoAtualizadoEspecial = sobreporMonteEspecial(
+          monte,
+          compartimentosOrdenados
+        );
+        if (compartimentoAtualizadoEspecial) {
           alocado = true;
         }
       }

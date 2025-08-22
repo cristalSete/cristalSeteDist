@@ -52,6 +52,7 @@ export interface Monte {
   especial: boolean;
   monteBase?: Monte;
   alocado?: boolean;
+  naoPodeSerSobreposto?: boolean;
 }
 
 export interface CsvProduto {
