@@ -1191,7 +1191,6 @@ function tentarAgruparMontesNoMesmoCavalete(
     }
     
     // Se não conseguiu, REVERTER TUDO: montes E compartimento de teste
-    console.log(`[DEBUG-AGRUPAMENTO] Falhou no compartimento ${compartimento.id}, revertendo ${montesAlocados.length} montes`);
     for (const monte of montesAlocados) {
       monte.alocado = false;
       // IMPORTANTE: Remover o monte do compartimento de teste também
@@ -1199,7 +1198,6 @@ function tentarAgruparMontesNoMesmoCavalete(
         const ladoTyped = lado as LadoCompartimento;
         const index = ladoTyped.montes.findIndex((m: Monte) => m.id === monte.id);
         if (index !== -1) {
-          console.log(`[DEBUG-AGRUPAMENTO] Removendo monte ${monte.id} do lado ${Object.keys(compartimentoTeste.lados).find(key => compartimentoTeste.lados[key as keyof typeof compartimentoTeste.lados] === ladoTyped)}`);
           ladoTyped.montes.splice(index, 1);
           ladoTyped.larguraOcupada -= monte.largura;
           ladoTyped.larguraRestante += monte.largura;
@@ -1239,16 +1237,11 @@ function distribuirMontesNosCavaletes(
   // ESTRATÉGIA 1: Tentar agrupar todos os montes do mesmo cliente no mesmo cavalete, lado a lado
   // CORRIGIDO: Lógica de reversão corrigida para evitar subtrações incorretas
   const montesAgrupados = tentarAgruparMontesNoMesmoCavalete(montesOrdenados, compartimentosOrdenados);
-  
-  // DEBUG: Verificar se há montes duplicados após agrupamento
-  const montesAlocadosIds = new Set(montesAgrupados.map(m => m.id));
-  console.log(`[DEBUG-AGRUPAMENTO] Montes agrupados: ${montesAgrupados.length}, IDs:`, Array.from(montesAlocadosIds));
-  
+    
   // ESTRATÉGIA 2: Se não conseguiu agrupar, usar a estratégia padrão
   if (montesAgrupados.length === 0) {
     // FILTRAR apenas montes que NÃO foram alocados pelo agrupamento
     const montesNaoAlocados = montesOrdenados.filter(monte => !monte.alocado);
-    console.log(`[DEBUG-AGRUPAMENTO] Montes não alocados para estratégia padrão: ${montesNaoAlocados.length}`);
     
     for (const monte of montesNaoAlocados) {
       let alocado = false;
@@ -1319,7 +1312,10 @@ function tentarSobreposicaoFinal(
   compartimentos: Compartimento[]
 ): {montesAlocados: Monte[], montesNaoAlocados: Monte[]} {
   const montesAlocados: Monte[] = [];
-  const montesAindaNaoAlocados: Monte[] = [];  
+  const montesAindaNaoAlocados: Monte[] = [];
+  
+  const totalProdutosEntrada = montesNaoAlocados.reduce((total, monte) => total + monte.produtos.length, 0);
+  console.log(`\n🔧 [SOBREPOSICAO] Entrada: ${montesNaoAlocados.length} montes, ${totalProdutosEntrada} produtos`);  
   // Ordenar por peso para distribuição eficiente
   const montesOrdenados = [...montesNaoAlocados].sort((a, b) => a.peso - b.peso);  
   for (const monte of montesOrdenados) {
@@ -1403,6 +1399,8 @@ function tentarSobreposicaoFinal(
                   compartimento.lados.meio = lado;
                 }              
                 montesAlocados.push(monte);
+                trackMonte(monte.id, "ADICIONADO", "montesAlocados via sobreposição múltipla");
+                console.log(`   ✅ Monte sobreposição múltipla alocado: ${monte.produtos.length} produtos`);
                 alocado = true;
                 break;
               }
@@ -1414,7 +1412,11 @@ function tentarSobreposicaoFinal(
       if (alocado) break;
     }    
     if (!alocado) {
-      const { monteDeitado, monteEmPe } = separarPecasDeitadas(monte);      
+      console.log(`   🔄 Separando monte ${monte.id.substring(0,8)} (${monte.produtos.length} produtos)`);
+      const { monteDeitado, monteEmPe } = separarPecasDeitadas(monte);
+      const produtosDeitados = monteDeitado?.produtos.length || 0;
+      const produtosEmPe = monteEmPe?.produtos.length || 0;
+      console.log(`   📊 Resultado separação: ${produtosDeitados} deitados + ${produtosEmPe} em pé = ${produtosDeitados + produtosEmPe}`);      
       let conseguiuAlocarAlgum = false;      
       if (monteDeitado) {
         for (const compartimento of compartimentos) {
@@ -1627,10 +1629,13 @@ function tentarSobreposicaoFinal(
                 compartimento.lados.meio = lado;
               }              
               montesAlocados.push(monteEmPe);
+              trackMonte(monteEmPe.id, "ADICIONADO", "montesAlocados via monteEmPe direto");
+              console.log(`   ✅ MonteEmPe alocado: ${monteEmPe.produtos.length} produtos`);
               conseguiuAlocarAlgum = true;
               break;
             }
           }
+          if (conseguiuAlocarAlgum) break; // ✅ CORRIGE DUPLICAÇÃO: quebra loop dos compartimentos
         }         
         if (!conseguiuAlocarAlgum) {
           for (const compartimento of compartimentos) {
@@ -1798,14 +1803,36 @@ function tentarSobreposicaoFinal(
           }
         }
       }      
+      // CORREÇÃO CRÍTICA: Quando um monte é separado em deitado/emPe, 
+      // só adicionar os novos montes aos não alocados, NUNCA o original
       if (monteDeitado && !monteDeitado.alocado) {
         montesAindaNaoAlocados.push(monteDeitado);
+        console.log(`   ❌ MonteDeitado não alocado: ${monteDeitado.produtos.length} produtos`);
       }      
       if (monteEmPe && !monteEmPe.alocado) {
         montesAindaNaoAlocados.push(monteEmPe);
+        console.log(`   ❌ MonteEmPe não alocado: ${monteEmPe.produtos.length} produtos`);
       }
+      // O monte original foi "consumido" na separação - seus produtos agora 
+      // estão nos novos montes, então NÃO adicionamos ele aos não alocados
+    } else if (!alocado) {
+      // ✅ CORREÇÃO: Só adicionar aos não alocados se o monte original realmente NÃO foi alocado
+      montesAindaNaoAlocados.push(monte);
+      console.log(`   ❌ Monte original não alocado: ${monte.produtos.length} produtos`);
     }
-  }  
+    // Se alocado === true, o monte foi alocado diretamente (sem separação) e NÃO vai para não alocados
+  }
+  
+  const totalAlocadosAqui = montesAlocados.reduce((total, monte) => total + monte.produtos.length, 0);
+  const totalNaoAlocadosAqui = montesAindaNaoAlocados.reduce((total, monte) => total + monte.produtos.length, 0);
+  const totalSaida = totalAlocadosAqui + totalNaoAlocadosAqui;
+  
+  console.log(`🔧 [SOBREPOSICAO] Saída: ${montesAlocados.length} alocados (${totalAlocadosAqui} produtos) + ${montesAindaNaoAlocados.length} não alocados (${totalNaoAlocadosAqui} produtos) = ${totalSaida} total`);
+  
+  if (totalSaida !== totalProdutosEntrada) {
+    console.error(`❌ ERRO na sobreposição: ${totalProdutosEntrada} → ${totalSaida} (diferença: ${totalSaida - totalProdutosEntrada})`);
+  }
+  
   return {montesAlocados, montesNaoAlocados: montesAindaNaoAlocados};
 }
 
@@ -1815,9 +1842,28 @@ function tentarSobreposicaoFinal(
 
 
 
+// Sistema de rastreamento global
+const monteTracker = new Map<string, string[]>();
+
+function trackMonte(monteId: string, action: string, location: string) {
+  if (!monteTracker.has(monteId)) {
+    monteTracker.set(monteId, []);
+  }
+  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  monteTracker.get(monteId)!.push(`${timestamp} - ${action} em ${location}`);
+  console.log(`📍 [TRACK] Monte ${monteId.substring(0,8)}: ${action} em ${location}`);
+}
+
 export function distribuirProdutos(
   produtos: ProdutoFormatado[]
 ): {compartimentos: Compartimento[], montesAlocados: Monte[], montesNaoAlocados: Monte[]} {
+  // Limpar rastreamento anterior
+  monteTracker.clear();
+  
+  // DEBUG DETALHADO: Rastrear cada passo
+  const totalInicial = produtos.reduce((total, p) => total + p.quantidade, 0);
+  console.log(`🔍 [INICIO] ${produtos.length} tipos de produtos, ${totalInicial} unidades totais`);
+  
   const produtosAgrupadosPorCliente = agruparProdutosPorCliente(produtos);  
   produtosAgrupadosPorCliente.reverse();  
   const compartimentos = JSON.parse(JSON.stringify([
@@ -1899,14 +1945,32 @@ export function distribuirProdutos(
   const montesAlocados: Monte[] = [];
   const montesNaoAlocados: Monte[] = [];  
   for (let i = 0; i < produtosAgrupadosPorCliente.length; i++) {
-    const clienteUnico = produtosAgrupadosPorCliente[i];    
-    const montesDeUmCliente = gerarMontes(clienteUnico.produtos);    
+    const clienteUnico = produtosAgrupadosPorCliente[i];
+    
+    console.log(`\n📦 [CLIENTE] ${clienteUnico.idCliente}`);
+    console.log(`   Produtos originais: ${clienteUnico.produtos.length} tipos`);
+    const totalProdutosCliente = clienteUnico.produtos.reduce((total, p) => total + p.quantidade, 0);
+    console.log(`   Total unidades: ${totalProdutosCliente}`);
+    
+    const montesDeUmCliente = gerarMontes(clienteUnico.produtos);
+    
+    const totalProdutosNosMontes = montesDeUmCliente.reduce((total, monte) => total + monte.produtos.length, 0);
+    console.log(`   Após gerarMontes: ${montesDeUmCliente.length} montes, ${totalProdutosNosMontes} produtos`);
+    
+    if (totalProdutosNosMontes !== totalProdutosCliente) {
+      console.error(`❌ ERRO: Cliente ${clienteUnico.idCliente} - Produtos: ${totalProdutosCliente} → ${totalProdutosNosMontes} (diferença: ${totalProdutosNosMontes - totalProdutosCliente})`);
+    }
+    
     
     // PRIMEIRA REGRA: Tentar alocar montes em pé em um único cavalete
     const resultadoMontesEmPe = tentarAlocarMontesEmPeEmUnicoCavalete(montesDeUmCliente, compartimentos);
     
+    console.log(`   🎯 REGRA 1: ${resultadoMontesEmPe.montesAlocados.length} alocados (${resultadoMontesEmPe.montesAlocados.reduce((t, m) => t + m.produtos.length, 0)} produtos), ${resultadoMontesEmPe.montesNaoAlocados.length} não alocados (${resultadoMontesEmPe.montesNaoAlocados.reduce((t, m) => t + m.produtos.length, 0)} produtos)`);
+    
     // SEGUNDA REGRA: Tentar alocar com preferências (apenas para montes não alocados pela primeira regra)
     const resultadoAlocacao = tentarAlocarComPreferencias(resultadoMontesEmPe.montesNaoAlocados, compartimentos, clienteUnico.idCliente);
+    
+    console.log(`   🎯 REGRA 2: ${resultadoAlocacao.montesAlocados.length} alocados (${resultadoAlocacao.montesAlocados.reduce((t, m) => t + m.produtos.length, 0)} produtos), ${resultadoAlocacao.montesNaoAlocados.length} não alocados (${resultadoAlocacao.montesNaoAlocados.reduce((t, m) => t + m.produtos.length, 0)} produtos)`);
     
     // TERCEIRA REGRA: Se ainda há montes não alocados, tentar alocação normal
     if (resultadoAlocacao.montesNaoAlocados.length > 0) {
@@ -1915,40 +1979,89 @@ export function distribuirProdutos(
       const montesAlocadosNormal = resultadoAlocacao.montesNaoAlocados.filter((monte) => monte.alocado);
       const montesNaoAlocadosNormal = resultadoAlocacao.montesNaoAlocados.filter((monte) => !monte.alocado);
       
+      console.log(`   🎯 REGRA 3: ${montesAlocadosNormal.length} alocados (${montesAlocadosNormal.reduce((t, m) => t + m.produtos.length, 0)} produtos), ${montesNaoAlocadosNormal.length} não alocados (${montesNaoAlocadosNormal.reduce((t, m) => t + m.produtos.length, 0)} produtos)`);
+      
+      // CORREÇÃO: Evitar duplicação - adicionar apenas os montes alocados pelas diferentes regras
+      resultadoMontesEmPe.montesAlocados.forEach(m => trackMonte(m.id, "ADICIONADO", "montesAlocados via REGRA 1"));
+      resultadoAlocacao.montesAlocados.forEach(m => trackMonte(m.id, "ADICIONADO", "montesAlocados via REGRA 2"));
+      montesAlocadosNormal.forEach(m => trackMonte(m.id, "ADICIONADO", "montesAlocados via REGRA 3"));
+      
       montesAlocados.push(...resultadoMontesEmPe.montesAlocados, ...resultadoAlocacao.montesAlocados, ...montesAlocadosNormal);
+      
+      montesNaoAlocadosNormal.forEach(m => trackMonte(m.id, "ADICIONADO", "montesNaoAlocados via REGRA 3"));
       montesNaoAlocados.push(...montesNaoAlocadosNormal);
     } else {
+      // CORREÇÃO: Adicionar apenas os montes alocados pelas duas primeiras regras
+      resultadoMontesEmPe.montesAlocados.forEach(m => trackMonte(m.id, "ADICIONADO", "montesAlocados via REGRA 1 (sem REGRA 3)"));
+      resultadoAlocacao.montesAlocados.forEach(m => trackMonte(m.id, "ADICIONADO", "montesAlocados via REGRA 2 (sem REGRA 3)"));
+      
       montesAlocados.push(...resultadoMontesEmPe.montesAlocados, ...resultadoAlocacao.montesAlocados);
     }
   }  
   if (montesNaoAlocados.length > 0) {
-    const resultadoSobreposicao = tentarSobreposicaoFinal(montesNaoAlocados, compartimentos);    
+    const resultadoSobreposicao = tentarSobreposicaoFinal(montesNaoAlocados, compartimentos);
+    
+    resultadoSobreposicao.montesAlocados.forEach(m => trackMonte(m.id, "ADICIONADO", "montesAlocados via SOBREPOSICAO"));
     montesAlocados.push(...resultadoSobreposicao.montesAlocados);    
+    
     montesNaoAlocados.length = 0;
+    resultadoSobreposicao.montesNaoAlocados.forEach(m => trackMonte(m.id, "ADICIONADO", "montesNaoAlocados via SOBREPOSICAO"));
     montesNaoAlocados.push(...resultadoSobreposicao.montesNaoAlocados);
   }
-  // Debug: contar produtos para verificar se há perda
-  let totalProdutosMontesAlocados = 0;
-  let totalProdutosMontesNaoAlocados = 0;
+ 
   
-  for (const monte of montesAlocados) {
-    totalProdutosMontesAlocados += contarProdutosNosMontes(monte);
+  // DEBUG FINAL: Verificar contagem total e duplicações
+  console.log(`\n🔍 [VERIFICAÇÃO DE DUPLICAÇÃO - APÓS LIMPEZA]`);
+  
+  // Verificar IDs duplicados nos montes alocados
+  const idsAlocados = montesAlocados.map(m => m.id);
+  const idsUnicosAlocados = [...new Set(idsAlocados)];
+  if (idsAlocados.length !== idsUnicosAlocados.length) {
+    console.error(`❌ DUPLICAÇÃO: ${idsAlocados.length - idsUnicosAlocados.length} montes alocados duplicados!`);
+    
+    // Encontrar quais IDs estão duplicados
+    const countMap = new Map<string, number>();
+    idsAlocados.forEach(id => countMap.set(id, (countMap.get(id) || 0) + 1));
+    const duplicatedIds = Array.from(countMap.entries()).filter(([, count]) => count > 1);
+    
+    console.error(`🔍 [DUPLICADOS DETECTADOS]:`);
+    duplicatedIds.forEach(([id, count]) => {
+      console.error(`   Monte ${id.substring(0,8)} aparece ${count} vezes`);
+      console.error(`   Histórico completo:`);
+      const history = monteTracker.get(id) || [];
+      history.forEach(entry => console.error(`     ${entry}`));
+    });
   }
   
-  for (const monte of montesNaoAlocados) {
-    totalProdutosMontesNaoAlocados += contarProdutosNosMontes(monte);
+  // Verificar IDs duplicados nos montes não alocados
+  const idsNaoAlocados = montesNaoAlocados.map(m => m.id);
+  const idsUnicosNaoAlocados = [...new Set(idsNaoAlocados)];
+  if (idsNaoAlocados.length !== idsUnicosNaoAlocados.length) {
+    console.error(`❌ DUPLICAÇÃO: ${idsNaoAlocados.length - idsUnicosNaoAlocados.length} montes não alocados duplicados!`);
   }
   
-  console.log(`[DEBUG-CONTAGEM] Total produtos originais: ${produtos.length}`);
-  console.log(`[DEBUG-CONTAGEM] Total produtos em montes alocados: ${totalProdutosMontesAlocados}`);
-  console.log(`[DEBUG-CONTAGEM] Total produtos em montes não alocados: ${totalProdutosMontesNaoAlocados}`);
-  console.log(`[DEBUG-CONTAGEM] Diferença: ${produtos.length - (totalProdutosMontesAlocados + totalProdutosMontesNaoAlocados)}`);
+  // Verificar se há overlap entre alocados e não alocados
+  const overlap = idsUnicosAlocados.filter(id => idsUnicosNaoAlocados.includes(id));
+  if (overlap.length > 0) {
+    console.error(`❌ OVERLAP: ${overlap.length} montes estão em ambos os arrays!`);
+  }
   
-  // VERIFICAÇÃO EXTRA: Contar produtos únicos para confirmar correção
-  const produtosIdsUnicos = new Set(produtos.map(p => p.id || `${p.tipo}-${p.largura}-${p.altura}`));
-  console.log(`[DEBUG-CONTAGEM] Produtos únicos originais: ${produtosIdsUnicos.size}`);
+  const totalAlocados = montesAlocados.reduce((total, monte) => total + monte.produtos.length, 0);
+  const totalNaoAlocados = montesNaoAlocados.reduce((total, monte) => total + monte.produtos.length, 0);
+  const totalFinal = totalAlocados + totalNaoAlocados;
   
-
+  console.log(`\n🎯 [RESULTADO FINAL]`);
+  console.log(`   Montes alocados: ${montesAlocados.length} (${totalAlocados} produtos)`);
+  console.log(`   Montes não alocados: ${montesNaoAlocados.length} (${totalNaoAlocados} produtos)`);
+  console.log(`   Total final: ${totalFinal} produtos`);
+  console.log(`   Inicial: ${totalInicial} produtos`);
+  console.log(`   Diferença: ${totalFinal - totalInicial} produtos`);
+  
+  if (totalFinal !== totalInicial) {
+    console.error(`❌ DUPLICAÇÃO DETECTADA: ${totalFinal - totalInicial} produtos extras!`);
+  } else {
+    console.log(`✅ CONTAGEM CORRETA!`);
+  }
   
   return {compartimentos, montesAlocados, montesNaoAlocados};
 }
