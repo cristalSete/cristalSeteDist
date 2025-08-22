@@ -2,7 +2,7 @@ import { Compartimento } from "@/types/Compartimento";
 import { MonteCard } from "./MonteCard";
 
 export const CompartimentoCard = ({compartimento}: {compartimento: Compartimento}) => {
-  const {id, tipo, altura, lados} = compartimento;
+  const {id, tipo, altura, lados, orientacao} = compartimento;
 
   return (
     <div className="border rounded-lg shadow p-4 bg-white space-y-4">
@@ -13,7 +13,7 @@ export const CompartimentoCard = ({compartimento}: {compartimento: Compartimento
       {Object.entries(lados).map(([ladoNome, lado]) => (
         <div key={ladoNome} className="border-t pt-2">
           <div className="text-sm font-medium mb-2">
-            Lado: {ladoNome} ({lado.larguraOcupada + lado.larguraRestante}mm) —
+            Lado: {orientacao === "vertical" ? ladoNome === "frente" ? "motorista" : "ajudante" : ladoNome} ({lado.larguraOcupada + lado.larguraRestante}mm) —
             Ocupado: {lado.larguraOcupada}mm / Restante: {lado.larguraRestante}mm
           </div>
           <div className="flex flex-wrap gap-4">

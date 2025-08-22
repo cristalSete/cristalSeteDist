@@ -87,9 +87,19 @@ export const MonteCard = ({
       <div className="text-sm">Altura do monte: {monte.altura}mm</div>
       <div className="text-sm">Largura do monte: {monte.largura}mm</div>
       <div className="text-sm">Total de produtos: {totalProdutos}</div>
-      <div className="text-sm">Lado: {monte.lado}</div>
-      <div className="text-xs italic text-gray-500">
-        {monte.produtos[0].precisaDeitado ? "Deitado" : "Em pé"}
+      <div className="flex items-center justify-between">
+        <div className="text-sm">Lado: {monte.lado}</div>
+        {
+          monte.produtos[0].precisaDeitado ? (
+            <span className="text-xs text-white bg-red-500 px-2 py-0.5 rounded-full">
+              Deitado
+            </span>
+          ) : (
+            <span className="text-xs text-white bg-cyan-500 px-2 py-0.5 rounded-full">
+              Em pé
+            </span>
+          )
+        }
       </div>
 
       {/* {monte.monteBase && (

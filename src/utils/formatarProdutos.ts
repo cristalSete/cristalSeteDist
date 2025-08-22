@@ -59,7 +59,7 @@ export function precisaDeitar(altura: number, largura: number, tipo: TipoVidro):
   const maiorLado = Math.max(altura, largura);
   const menorLado = Math.min(altura, largura);
 
-  return maiorLado > 2450 || menorLado > 1200 || tipo === TipoVidro.tm1ref || tipo === TipoVidro.tm2ref || tipo === TipoVidro.tm3ref || tipo === TipoVidro.tm4ref || tipo === TipoVidro.tm5escd || tipo === TipoVidro.tm1 || tipo === TipoVidro.tm2 || tipo === TipoVidro.tm3 || tipo === TipoVidro.tm4 || tipo === TipoVidro.tm;
+  return maiorLado > 2450 || menorLado > 1200 || tipo === TipoVidro.tm1ref || tipo === TipoVidro.tm2ref || tipo === TipoVidro.tm3ref || tipo === TipoVidro.tm4ref || tipo === TipoVidro.tm5escd || tipo === TipoVidro.tm1 || tipo === TipoVidro.tm2 || tipo === TipoVidro.tm3 || tipo === TipoVidro.tm4 || tipo === TipoVidro.tm || tipo === TipoVidro.ecoGlass || tipo === TipoVidro.ekoGlass || tipo === TipoVidro.molde || tipo === TipoVidro.lcfx || tipo === TipoVidro.pvb || tipo === TipoVidro.laminadoComum || tipo === TipoVidro.laminadoTemperado || tipo === TipoVidro.espelho || tipo === TipoVidro.comum;
 }
 
 function normalizarPeso(pesoStr: string): number {

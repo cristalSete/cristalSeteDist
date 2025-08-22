@@ -10,12 +10,20 @@ export function tentarAlocarComPreferencias(
   compartimentos: Compartimento[],
   idCliente: string
 ): { montesAlocados: Monte[], montesNaoAlocados: Monte[] } {
+  console.log(`[DEBUG-PREFERENCIAS] 📊 ENTRADA - Cliente ${idCliente}:`);
+  for (const comp of compartimentos) {
+    console.log(`[DEBUG-PREFERENCIAS] ${comp.id}: frente=${comp.lados.frente.larguraOcupada}mm, trás=${comp.lados.tras?.larguraOcupada || 0}mm`);
+  }
+  
   const preferencias = clientesEspeciais[parseInt(idCliente)];
   
   if (!preferencias) {
     // Cliente não tem preferências especiais, retorna todos como não alocados
+    console.log(`[DEBUG-PREFERENCIAS] ❌ Cliente ${idCliente} sem preferências`);
     return { montesAlocados: [], montesNaoAlocados: [...montesDeUmCliente] };
   }
+  
+  console.log(`[DEBUG-PREFERENCIAS] ✅ Cliente ${idCliente} tem preferências:`, preferencias);
 
   const montesAlocados: Monte[] = [];
   const montesNaoAlocados: Monte[] = [];
