@@ -20,9 +20,11 @@ function extrairTodosProdutosDoMonte(
 export const MonteCard = ({
   monte,
   className = "",
+  orientacao = "horizontal",
 }: {
   monte: MonteComEmpilhados;
   className?: string;
+  orientacao?: "horizontal" | "vertical";
 }) => {
   const [expandedClientes, setExpandedClientes] = useState<
     Record<string, boolean>
@@ -40,13 +42,13 @@ export const MonteCard = ({
   const todosProdutos = extrairTodosProdutosDoMonte(monte);
 
   const produtosPorCliente = todosProdutos.reduce<
-    Record<string, {id: string; nome: string; sequencia: number; produtos: ProdutoFormatado[]}>
+    Record<string, {id: string; nome: string; sequencia: number; produtos: ProdutoFormatado[], peso: number}>
   >((acc, produto) => {
     const clienteId = produto.id;
     const clienteNome = produto.cliente;
 
     if (!acc[clienteNome]) {
-      acc[clienteNome] = {id: clienteId, nome: clienteNome, sequencia: produto.sequencia, produtos: []};
+      acc[clienteNome] = {id: clienteId, nome: clienteNome, sequencia: produto.sequencia, produtos: [], peso: produto.peso};
     }
 
     acc[clienteNome].produtos.push(produto);
@@ -88,7 +90,7 @@ export const MonteCard = ({
       <div className="text-sm">Largura do monte: {monte.largura}mm</div>
       <div className="text-sm">Total de produtos: {totalProdutos}</div>
       <div className="flex items-center justify-between">
-        <div className="text-sm">Lado: {monte.lado}</div>
+        <div className="text-sm">Lado: {orientacao === "horizontal" ? monte.lado : monte.lado === "motorista" ? "frente" : "tras"}</div>
         {
           monte.produtos[0].precisaDeitado ? (
             <span className="text-xs text-white bg-red-500 px-2 py-0.5 rounded-full">
@@ -101,6 +103,7 @@ export const MonteCard = ({
           )
         }
       </div>
+      <div className="text-sm">Peso do monte: {monte.peso.toFixed(2)}kg</div>
 
       {/* {monte.monteBase && (
         <div className="text-sm bg-green-200 px-1">
@@ -183,6 +186,7 @@ export const MonteCard = ({
           key={index}
           monte={empilhado}
           className="border-none w-full p-0"
+          orientacao={orientacao}
         />
       ))}
     </div>

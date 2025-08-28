@@ -1,6 +1,27 @@
 import { Monte } from "@/types/Produto";
 import { clientesEspeciais } from "./clientesEspeciais";
 import { Compartimento } from "@/types/Compartimento";
+import { podeAtenderPreferenciaDeLado } from "./distribuicaoLogistica";
+
+
+function calcularLadoReal(
+  compartimento: Compartimento,
+  monte: Monte,
+  posicaoAtual: number
+): "motorista" | "ajudante" {
+  let larguraTotal = 2200;
+  
+  if (compartimento.id === "cavalete_3") {
+    larguraTotal = 3800;
+  } else if (compartimento.id === "malhau") {
+    larguraTotal = 2200;
+  }
+  
+  const meiaLargura = larguraTotal / 2;
+  const posicaoCentralMonte = posicaoAtual + (monte.largura / 2);
+  
+  return posicaoCentralMonte <= meiaLargura ? "motorista" : "ajudante";
+}
 
 /**
  * Tenta alocar montes de um cliente especial de acordo com suas preferências
@@ -10,20 +31,11 @@ export function tentarAlocarComPreferencias(
   compartimentos: Compartimento[],
   idCliente: string
 ): { montesAlocados: Monte[], montesNaoAlocados: Monte[] } {
-  console.log(`[DEBUG-PREFERENCIAS] 📊 ENTRADA - Cliente ${idCliente}:`);
-  for (const comp of compartimentos) {
-    console.log(`[DEBUG-PREFERENCIAS] ${comp.id}: frente=${comp.lados.frente.larguraOcupada}mm, trás=${comp.lados.tras?.larguraOcupada || 0}mm`);
-  }
-  
   const preferencias = clientesEspeciais[parseInt(idCliente)];
   
   if (!preferencias) {
-    // Cliente não tem preferências especiais, retorna todos como não alocados
-    console.log(`[DEBUG-PREFERENCIAS] ❌ Cliente ${idCliente} sem preferências`);
     return { montesAlocados: [], montesNaoAlocados: [...montesDeUmCliente] };
   }
-  
-  console.log(`[DEBUG-PREFERENCIAS] ✅ Cliente ${idCliente} tem preferências:`, preferencias);
 
   const montesAlocados: Monte[] = [];
   const montesNaoAlocados: Monte[] = [];
@@ -69,11 +81,11 @@ export function tentarAlocarComPreferencias(
         
         // Tentar alocar no lado da frente se especificado
         if (preferencias.posicaoCavalete === "FRENTE" || !preferencias.posicaoCavalete) {
-          if (compartimento.lados.frente && compartimento.lados.frente.larguraRestante >= monte.largura) {
-            const lado = compartimento.orientacao === "horizontal" ? ladoPreferido : 
-              (ladoPreferido === "motorista" ? "motorista" : "ajudante");
+          if (compartimento.lados.frente && podeAtenderPreferenciaDeLado(compartimento, compartimento.lados.frente, monte, ladoPreferido)) {
+
+            const ladoReal = calcularLadoReal(compartimento, monte, compartimento.lados.frente.larguraOcupada);
             
-            monte.lado = lado;
+            monte.lado = ladoReal;
             monte.alocado = true;
             compartimento.lados.frente.montes.push(monte);
             compartimento.lados.frente.larguraOcupada += monte.largura;
@@ -87,11 +99,11 @@ export function tentarAlocarComPreferencias(
         
         // Tentar alocar no lado de trás se especificado
         if (preferencias.posicaoCavalete === "ATRAS" && compartimento.lados.tras) {
-          if (compartimento.lados.tras.larguraRestante >= monte.largura) {
-            const lado = compartimento.orientacao === "horizontal" ? ladoPreferido : 
-              (ladoPreferido === "motorista" ? "motorista" : "ajudante");
+          if (podeAtenderPreferenciaDeLado(compartimento, compartimento.lados.tras, monte, ladoPreferido)) {
+
+            const ladoReal = calcularLadoReal(compartimento, monte, compartimento.lados.tras.larguraOcupada);
             
-            monte.lado = lado;
+            monte.lado = ladoReal;
             monte.alocado = true;
             compartimento.lados.tras.montes.push(monte);
             compartimento.lados.tras.larguraOcupada += monte.largura;
@@ -103,11 +115,11 @@ export function tentarAlocarComPreferencias(
           }
         }
       } else {
-        // Sem preferência de lado, tentar alocar normalmente
-        // Aqui precisamos importar a função colocarNoCompartimento
-        // Por enquanto, vamos apenas verificar se cabe no compartimento
+
         if (compartimento.lados.frente && compartimento.lados.frente.larguraRestante >= monte.largura) {
-          monte.lado = "motorista";
+          const ladoReal = calcularLadoReal(compartimento, monte, compartimento.lados.frente.larguraOcupada);
+          
+          monte.lado = ladoReal;
           monte.alocado = true;
           compartimento.lados.frente.montes.push(monte);
           compartimento.lados.frente.larguraOcupada += monte.largura;

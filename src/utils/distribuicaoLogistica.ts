@@ -6,6 +6,79 @@ import { tentarAlocarComPreferencias } from "./validacaoPreferencias";
 const maxPorMonte = 30;
 
 /**
+ * Calcula o lado do cavalete baseado na posição do monte na largura total do compartimento.
+ * Para cavaletes horizontais (cavalete_1, cavalete_2), a largura total é 2200.
+ * Para cavalete_3 (vertical), a largura total é 3800.
+ * 
+ * @param compartimento - O compartimento onde o monte será alocado
+ * @param monte - O monte a ser alocado
+ * @param posicaoAtual - A posição atual na largura do lado (larguraOcupada)
+ * @returns "motorista" se está na primeira metade, "ajudante" se está na segunda metade
+ */
+function calcularLadoPorPosicao(
+  compartimento: Compartimento,
+  monte: Monte,
+  posicaoAtual: number
+): "motorista" | "ajudante" {
+  // Definir largura total baseada no tipo de compartimento
+  let larguraTotal = 2200; // Padrão para cavaletes horizontais
+  
+  if (compartimento.id === "cavalete_3") {
+    larguraTotal = 3800; // Cavalete vertical
+  } else if (compartimento.id === "malhau") {
+    larguraTotal = 2200; // Malhau
+  }
+  
+  const meiaLargura = larguraTotal / 2;
+  
+  // Calcular a posição central do monte (posição atual + metade da largura do monte)
+  const posicaoCentralMonte = posicaoAtual + (monte.largura / 2);
+  
+  // Se a maior parte do monte está na primeira metade, é lado motorista
+  // Se a maior parte está na segunda metade, é lado ajudante
+  return posicaoCentralMonte <= meiaLargura ? "motorista" : "ajudante";
+}
+
+/**
+ * Verifica se é possível alocar um monte respeitando uma preferência de lado específica.
+ * Esta função integra o sistema de preferências com a nova lógica de posição real no cavalete.
+ * 
+ * @param compartimento - O compartimento onde o monte será alocado
+ * @param lado - O lado do compartimento (frente/tras)
+ * @param monte - O monte a ser alocado
+ * @param ladoPreferido - O lado preferido pelo cliente ("motorista" ou "ajudante")
+ * @returns true se a preferência pode ser atendida, false caso contrário
+ */
+export function podeAtenderPreferenciaDeLado(
+  compartimento: Compartimento,
+  lado: LadoCompartimento,
+  monte: Monte,
+  ladoPreferido: "motorista" | "ajudante"
+): boolean {
+  // Se não há espaço suficiente, não pode atender a preferência
+  if (lado.larguraRestante < monte.largura) {
+    return false;
+  }
+  
+  // Calcular qual seria o lado real baseado na posição atual
+  const ladoReal = calcularLadoPorPosicao(compartimento, monte, lado.larguraOcupada);
+  
+  // A preferência pode ser atendida se o lado real coincide com o lado preferido
+  return ladoReal === ladoPreferido;
+}
+
+function definirSobreposicaoComHerancaDeLado(
+  monteSobreposto: Monte,
+  monteBase: Monte
+): void {
+  monteSobreposto.monteBase = monteBase;
+  monteSobreposto.lado = monteBase.lado;
+  monteSobreposto.alocado = true;
+}
+
+
+
+/**
  * Obtém o id da raiz da cadeia (monte base sem monteBase) de um monte.
  */
 function obterIdRaizDaCadeia(monte: Monte): string {
@@ -275,7 +348,6 @@ function colocarNoCompartimento(
   const cabeNaFrente = (frente.larguraOcupada + monte.largura) <= larguraMaximaFrente;
   const cabeAtras = tras ? (tras.larguraOcupada + monte.largura) <= larguraMaximaTras : false;
   const ladoFrenteVazio = frente.montes.length === 0;
-  const ladoTrasVazio = tras ? tras.montes.length === 0 : false;
   const pesoLimiteMotorista = 0.6 * pesoTotalDosMontes;
   const determinarLadoPreferencial = (
     ladoVazio: boolean
@@ -292,7 +364,8 @@ function colocarNoCompartimento(
   };
   if (compartimento.orientacao === "horizontal") {
     if (cabeNaFrente) {
-      const lado = determinarLadoPreferencial(ladoFrenteVazio);
+
+      const lado = calcularLadoPorPosicao(compartimento, monte, frente.larguraOcupada);
       frente.larguraOcupada += monte.largura;
       frente.larguraRestante -= monte.largura;
       monte.lado = lado;
@@ -301,7 +374,8 @@ function colocarNoCompartimento(
       return compartimento;
     }
     if (cabeAtras && tras) {
-      const lado = determinarLadoPreferencial(ladoTrasVazio);
+
+      const lado = calcularLadoPorPosicao(compartimento, monte, tras.larguraOcupada);
       tras.larguraOcupada += monte.largura;
       tras.larguraRestante -= monte.largura;
       monte.lado = lado;
@@ -365,14 +439,16 @@ function colocarNoCompartimento(
         
         // Alocar no lado escolhido
         if (ladoEscolhido === "frente") {
-          monte.lado = "motorista";
+    
+          monte.lado = calcularLadoPorPosicao(compartimento, monte, frente.larguraOcupada);
           frente.larguraOcupada += monte.largura;
           frente.larguraRestante -= monte.largura;
           monte.alocado = true;
           frente.montes.push(monte);
           return compartimento;
         } else if (ladoEscolhido === "tras" && tras) {
-          monte.lado = "ajudante";
+    
+          monte.lado = calcularLadoPorPosicao(compartimento, monte, tras.larguraOcupada);
           tras.larguraOcupada += monte.largura;
           tras.larguraRestante -= monte.largura;
           monte.alocado = true;
@@ -383,7 +459,8 @@ function colocarNoCompartimento(
         // Para montes em pé, usar lógica padrão
         const ladoPreferencial = determinarLadoPreferencial(ladoFrenteVazio);    
         if (cabeNaFrente && (ladoPreferencial === "motorista" || !cabeAtras || !tras)) {
-          monte.lado = "motorista";
+    
+          monte.lado = calcularLadoPorPosicao(compartimento, monte, frente.larguraOcupada);
           frente.larguraOcupada += monte.largura;
           frente.larguraRestante -= monte.largura;
           monte.alocado = true;
@@ -391,7 +468,8 @@ function colocarNoCompartimento(
           return compartimento;
         }    
         if (cabeAtras && tras) {
-          monte.lado = "ajudante";
+    
+          monte.lado = calcularLadoPorPosicao(compartimento, monte, tras.larguraOcupada);
           tras.larguraOcupada += monte.largura;
           tras.larguraRestante -= monte.largura;
           monte.alocado = true;
@@ -403,7 +481,8 @@ function colocarNoCompartimento(
       // Lógica padrão para outros compartimentos verticais
       const ladoPreferencial = determinarLadoPreferencial(ladoFrenteVazio);    
       if (cabeNaFrente && (ladoPreferencial === "motorista" || !cabeAtras || !tras)) {
-        monte.lado = "motorista";
+  
+        monte.lado = calcularLadoPorPosicao(compartimento, monte, frente.larguraOcupada);
         frente.larguraOcupada += monte.largura;
         frente.larguraRestante -= monte.largura;
         monte.alocado = true;
@@ -411,7 +490,8 @@ function colocarNoCompartimento(
         return compartimento;
       }    
       if (cabeAtras && tras) {
-        monte.lado = "ajudante";
+  
+        monte.lado = calcularLadoPorPosicao(compartimento, monte, tras.larguraOcupada);
         tras.larguraOcupada += monte.largura;
         tras.larguraRestante -= monte.largura;
         monte.alocado = true;
@@ -742,7 +822,7 @@ function contarTodosProdutosNoMeio(ladoMeio: { montes: Monte[] }): number {
     total += monte.produtos?.length || 0;
   }
   
-  console.log(`DEBUG: Meio tem ${total} produtos totais de ${todosMontes.length} montes`);
+
   return total;
 }
 
@@ -765,16 +845,7 @@ function verificarFlexibilidadeMeio(
   // Verificar se adicionar o novo monte ultrapassaria o limite de 12
   const totalComNovoMonte = totalProdutosMeio + monteNovo.produtos.length;
   
-  console.log(`DEBUG: ${compartimento.id} - Meio atual: ${totalProdutosMeio}, Novo monte: ${monteNovo.produtos.length}, Total: ${totalComNovoMonte}`);
-  
-  // LIMITE RÍGIDO: máximo 12 itens no meio
-  if (totalComNovoMonte > 12) {
-    console.log(`DEBUG: REJEITADO - Excede limite de 12 itens no meio`);
-    return false;
-  }
-  
-  console.log(`DEBUG: ACEITO - Dentro do limite de 12 itens`);
-  return true;
+  return totalComNovoMonte <= 12;
 }
 
 function posicionarNoMeio(
@@ -828,15 +899,12 @@ function posicionarNoMeio(
           lado.montes.pop(); // Remover para não afetar o estado
           
           if (totalAposAdicao <= 12) {
-            monte.monteBase = topo;
-            monte.alocado = true;
+            definirSobreposicaoComHerancaDeLado(monte, topo);
             lado.montes.push(monte);
             compartimento.pesoTotal += monte.peso;
             compartimento.lados.meio = lado;
-            console.log(`DEBUG: Sobreposição na cadeia do meio ACEITA - Total final: ${totalAposAdicao}`);
+
             return compartimento;
-          } else {
-            console.log(`DEBUG: Sobreposição na cadeia do meio REJEITADA - Total seria: ${totalAposAdicao}`);
           }
         }
       } else {
@@ -849,15 +917,14 @@ function posicionarNoMeio(
             lado.montes.pop(); // Remover para não afetar o estado
             
             if (totalAposAdicao <= 12) {
-              monte.monteBase = monteExistente;
-              monte.alocado = true;
+              definirSobreposicaoComHerancaDeLado(monte, monteExistente);
               lado.montes.push(monte);
               compartimento.pesoTotal += monte.peso;
               compartimento.lados.meio = lado;
-              console.log(`DEBUG: Sobreposição no meio ACEITA - Total final: ${totalAposAdicao}`);
+
               return compartimento;
             } else {
-              console.log(`DEBUG: Sobreposição no meio REJEITADA - Total seria: ${totalAposAdicao}`);
+
             }
           }
         }
@@ -996,9 +1063,8 @@ function sobreporMultiplos(
         // Usar limite específico baseado no lado (12 para meio, 60 para outros)
         const limiteItens = ladoNome === "meio" ? 12 : 60;
         if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, limiteItens)) {
-          monte.monteBase = topo;
+          definirSobreposicaoComHerancaDeLado(monte, topo);
           lado.montes.push(monte);
-          monte.alocado = true;
           compartimento.pesoTotal += monte.peso;
           if (ladoNome === "frente") compartimento.lados.frente = lado;
           if (ladoNome === "tras") compartimento.lados.tras = lado;
@@ -1035,7 +1101,7 @@ function sobreporMultiplos(
             const raizId = obterIdRaizDaCadeia(escolhido);
             lado.cadeiaAlvoId = raizId;
             const topo = obterTopoDaCadeia(lado, raizId) || escolhido;
-            monte.monteBase = topo;
+            definirSobreposicaoComHerancaDeLado(monte, topo);
             lado.montes.push(monte);
             monte.alocado = true;
             compartimento.pesoTotal += monte.peso;
@@ -1079,7 +1145,7 @@ function sobreporMonteEspecial(
         // Usar limite específico baseado no lado (12 para meio, 32 para outros)
         const limiteItens = ladoNome === "meio" ? 12 : 32;
         if (topo && verificarSePodeMonteEspecialSobrepor(monteEspecial, topo, lado, limiteItens)) {
-          monteEspecial.monteBase = topo;
+          definirSobreposicaoComHerancaDeLado(monteEspecial, topo);
           lado.montes.push(monteEspecial);
           monteEspecial.alocado = true;
           compartimento.pesoTotal += monteEspecial.peso;
@@ -1111,7 +1177,7 @@ function sobreporMonteEspecial(
         // Verificar se pode sobrepor este monte base
         if (verificarSePodeMonteEspecialSobrepor(monteEspecial, monteBase, lado, limiteItens)) {
           // Alocar o monte especial sobre o monte base
-          monteEspecial.monteBase = monteBase;
+          definirSobreposicaoComHerancaDeLado(monteEspecial, monteBase);
           lado.montes.push(monteEspecial);
           monteEspecial.alocado = true;
           compartimento.pesoTotal += monteEspecial.peso;
@@ -1159,7 +1225,7 @@ function sobreporMonteEspecial(
             lado.cadeiaAlvoId = raizId;
             const topo = obterTopoDaCadeia(lado, raizId) || escolhido;
             
-            monteEspecial.monteBase = topo;
+            definirSobreposicaoComHerancaDeLado(monteEspecial, topo);
             lado.montes.push(monteEspecial);
             monteEspecial.alocado = true;
             compartimento.pesoTotal += monteEspecial.peso;
@@ -1389,7 +1455,7 @@ function sobrepor(
         // Usar limite específico baseado no lado (12 para meio, 32 para outros)
         const limiteItens = ladoNome === "meio" ? 12 : 32;
         if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, limiteItens)) {
-          monte.monteBase = topo;
+          definirSobreposicaoComHerancaDeLado(monte, topo);
           lado.montes.push(monte);
           monte.alocado = true;
           compartimento.pesoTotal += monte.peso;
@@ -1407,7 +1473,7 @@ function sobrepor(
         // Usar limite específico baseado no lado (12 para meio, 32 para outros)
         const limiteItens = ladoNome === "meio" ? 12 : 32;
         if (verificarSePodeSobrepor(monte, monteExistente, lado, limiteItens)) {
-          monte.monteBase = monteExistente;
+          definirSobreposicaoComHerancaDeLado(monte, monteExistente);
           lado.montes.push(monte);
           monte.alocado = true;
           compartimento.pesoTotal += monte.peso;
@@ -1758,7 +1824,7 @@ function tentarSobreposicaoFinal(
         if (montesSobreposicaoMultipla.length > 0) {
           for (const monteSobreposicao of montesSobreposicaoMultipla) {
             if (verificarSePodeSobrepor(monte, monteSobreposicao, lado, 34)) {
-              monte.monteBase = monteSobreposicao;
+              definirSobreposicaoComHerancaDeLado(monte, monteSobreposicao);
               lado.montes.push(monte);
               monte.alocado = true;
               compartimento.pesoTotal += monte.peso;              
@@ -1786,7 +1852,7 @@ function tentarSobreposicaoFinal(
           if (lado.cadeiaAlvoId) {
             const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
             if (topo && verificarSePodeSobrepor(monte, topo as Monte & {empilhados?: Monte[]}, lado, 34)) {
-              monte.monteBase = topo;
+              definirSobreposicaoComHerancaDeLado(monte, topo);
               lado.montes.push(monte);
               monte.alocado = true;
               compartimento.pesoTotal += monte.peso;              
@@ -1811,7 +1877,7 @@ function tentarSobreposicaoFinal(
           if (!lado.cadeiaAlvoId) {
             for (const monteBase of montesBase) {
               if (verificarSePodeSobrepor(monte, monteBase, lado, 34)) {
-                monte.monteBase = monteBase;
+                definirSobreposicaoComHerancaDeLado(monte, monteBase);
                 lado.montes.push(monte);
                 monte.alocado = true;
                 compartimento.pesoTotal += monte.peso;              
@@ -1858,7 +1924,7 @@ function tentarSobreposicaoFinal(
               for (const monteSobreposicao of montesSobreposicaoMultipla) {
                 if (verificarSePodeSobrepor(monteDeitado, monteSobreposicao, lado, 34)) {
 
-                  monteDeitado.monteBase = monteSobreposicao;
+                  definirSobreposicaoComHerancaDeLado(monteDeitado, monteSobreposicao);
                   lado.montes.push(monteDeitado);
                   monteDeitado.alocado = true;
                   compartimento.pesoTotal += monteDeitado.peso;                
@@ -1891,7 +1957,7 @@ function tentarSobreposicaoFinal(
                   if (qtd > maiorQtd) { maiorQtd = qtd; escolhido = m; }
                 }
                 const topo = obterTopoDaCadeia(lado, obterIdRaizDaCadeia(escolhido)) || escolhido;
-                monteDeitado.monteBase = topo;
+                definirSobreposicaoComHerancaDeLado(monteDeitado, topo);
                 lado.montes.push(monteDeitado);
                 monteDeitado.alocado = true;
                 compartimento.pesoTotal += monteDeitado.peso;                
@@ -1926,7 +1992,7 @@ function tentarSobreposicaoFinal(
                 for (const monteSobreposicao of montesSobreposicaoMultipla) {
                   if (verificarSePodeSobrepor(monteDeitado, monteSobreposicao, lado, 34)) {
 
-                    monteDeitado.monteBase = monteSobreposicao;
+                    definirSobreposicaoComHerancaDeLado(monteDeitado, monteSobreposicao);
                     lado.montes.push(monteDeitado);
                     monteDeitado.alocado = true;
                     compartimento.pesoTotal += monteDeitado.peso;                    
@@ -1955,7 +2021,7 @@ function tentarSobreposicaoFinal(
                   const topo = obterTopoDaCadeia(lado, lado.cadeiaAlvoId);
                   if (topo && verificarSePodeSobrepor(monteDeitado, topo as Monte & {empilhados?: Monte[]}, lado, 34)) {
 
-                    monteDeitado.monteBase = topo;
+                    definirSobreposicaoComHerancaDeLado(monteDeitado, topo);
                     lado.montes.push(monteDeitado);
                     monteDeitado.alocado = true;
                     compartimento.pesoTotal += monteDeitado.peso;                    
@@ -1981,7 +2047,7 @@ function tentarSobreposicaoFinal(
                   for (const monteBase of montesBase) {
                     if (verificarSePodeSobrepor(monteDeitado, monteBase, lado, 34)) {
 
-                      monteDeitado.monteBase = monteBase;
+                      definirSobreposicaoComHerancaDeLado(monteDeitado, monteBase);
                       lado.montes.push(monteDeitado);
                       monteDeitado.alocado = true;
                       compartimento.pesoTotal += monteDeitado.peso;                    
@@ -2585,7 +2651,8 @@ function tentarAlocarMontesEmPeEmUnicoCavalete(
       
       for (const monte of montesEmPe) {
         monte.alocado = true;
-        monte.lado = "motorista"; // Definir lado padrão
+
+        monte.lado = calcularLadoPorPosicao(compartimento, monte, lado.larguraOcupada);
         lado.montes.push(monte);
         lado.larguraOcupada += monte.largura;
         lado.larguraRestante -= monte.largura;

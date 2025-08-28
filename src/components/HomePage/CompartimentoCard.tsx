@@ -15,10 +15,11 @@ export const CompartimentoCard = ({compartimento}: {compartimento: Compartimento
           <div className="text-sm font-medium mb-2">
             Lado: {orientacao === "vertical" ? ladoNome === "frente" ? "motorista" : "ajudante" : ladoNome} ({lado.larguraOcupada + lado.larguraRestante}mm) —
             Ocupado: {lado.larguraOcupada}mm / Restante: {lado.larguraRestante}mm
+            Peso total: {lado.montes.reduce((acc, monte) => acc + monte.peso, 0).toFixed(2)}kg
           </div>
           <div className="flex flex-wrap gap-4">
             {lado.montes.map((monte, index) => {
-              return <MonteCard key={index} monte={monte} />;
+              return <MonteCard key={index} monte={monte} orientacao={orientacao}/>;
             })}
           </div>
         </div>
