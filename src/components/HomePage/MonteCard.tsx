@@ -40,13 +40,13 @@ export const MonteCard = ({
   const todosProdutos = extrairTodosProdutosDoMonte(monte);
 
   const produtosPorCliente = todosProdutos.reduce<
-    Record<string, {id: string; nome: string; produtos: ProdutoFormatado[]}>
+    Record<string, {id: string; nome: string; sequencia: number; produtos: ProdutoFormatado[]}>
   >((acc, produto) => {
     const clienteId = produto.id;
     const clienteNome = produto.cliente;
 
     if (!acc[clienteNome]) {
-      acc[clienteNome] = {id: clienteId, nome: clienteNome, produtos: []};
+      acc[clienteNome] = {id: clienteId, nome: clienteNome, sequencia: produto.sequencia, produtos: []};
     }
 
     acc[clienteNome].produtos.push(produto);
@@ -123,20 +123,24 @@ export const MonteCard = ({
                 {"bg-green-100": statusClientes[cliente] === "concluido"}
               )}
             >
-              <div className="flex justify-between items-center w-full">
+              <div className="flex justify-between items-center w-full flex-col">
                 <Text14>
                   {dados.id} - {dados.nome}
-                </Text14>
-
-                <select
-                  value={statusClientes[cliente] ?? "andamento"}
-                  onChange={(e) => handleStatusChange(cliente, e.target.value)}
-                  className="text-sm border rounded px-2 py-0.5 bg-white ring-0 outline-0 cursor-pointer"
-                >
-                  <option value="andamento">Em andamento</option>
-                  <option value="concluido">Concluído</option>
-                </select>
-              </div>
+                </Text14>     
+                <div className="flex items-center w-full justify-between">
+                  <Text14 className="text-xs text-gray-500">
+                    Sequência: {dados.sequencia}
+                  </Text14>
+                  <select
+                    value={statusClientes[cliente] ?? "andamento"}
+                    onChange={(e) => handleStatusChange(cliente, e.target.value)}
+                    className="text-sm border rounded px-2 py-0.5 bg-white ring-0 outline-0 cursor-pointer"
+                  >
+                    <option value="andamento">Em andamento</option>
+                    <option value="concluido">Concluído</option>
+                  </select>
+                </div>           
+              </div>              
 
               <SmallText>
                 Largura do maior produto:{" "}

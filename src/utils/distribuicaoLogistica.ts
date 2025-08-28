@@ -53,11 +53,15 @@ function ladosBalanceados(compartimento: Compartimento, monte?: Monte): Array<["
   });
 }
 
+/**
+ * Agrupa produtos por sequência, mantendo a estrutura com idCliente e nomeCliente
+ * para compatibilidade com o sistema existente
+ */
 export function agruparProdutosPorCliente(
   produtos: ProdutoFormatado[]
 ): AgrupadoPorCliente[] {
   const grupos = new Map<
-    string,
+    number,
     {
       idCliente: string;
       nomeCliente: string;
@@ -65,16 +69,16 @@ export function agruparProdutosPorCliente(
     }
   >();
   for (const produto of produtos) {
-    const clientKey = produto.cliente;
-    if (!grupos.has(clientKey)) {
-      grupos.set(clientKey, {
-        idCliente: clientKey,
+    const sequenciaKey = produto.sequencia;
+    if (!grupos.has(sequenciaKey)) {
+      grupos.set(sequenciaKey, {
+        idCliente: produto.cliente,
         nomeCliente: produto.cliente,
         produtos: [],
       });
     }
     const {...rest} = produto;
-    grupos.get(clientKey)!.produtos.push(rest);
+    grupos.get(sequenciaKey)!.produtos.push(rest);
   }
   return Array.from(grupos.values());
 }
@@ -143,6 +147,7 @@ function gerarMontes(produtosDeUmCliente: ProdutoFormatado[]): Monte[] {
         lado: "motorista",
         alocado: false,
         especial: false,
+        sequencia: produtosDoMonteDeitados[0].sequencia,
       });
       indexDeitados += sizeDeitados;
     }
@@ -169,6 +174,7 @@ function gerarMontes(produtosDeUmCliente: ProdutoFormatado[]): Monte[] {
       lado: "motorista",
       alocado: false,
       especial: false,
+      sequencia: produtosDoMonte[0].sequencia,
     });
     index += size;
   }
@@ -201,6 +207,7 @@ function gerarMontes(produtosDeUmCliente: ProdutoFormatado[]): Monte[] {
           lado: "motorista",
           alocado: false,
           especial: true,
+          sequencia: montePecas[0].sequencia,
         });
       }
       
@@ -222,6 +229,7 @@ function gerarMontes(produtosDeUmCliente: ProdutoFormatado[]): Monte[] {
         lado: "motorista",
         alocado: false,
         especial: true,
+        sequencia: unidadesEspeciais[0].sequencia,
       });
     }
   }
@@ -1467,6 +1475,7 @@ function separarPecasDeitadas(monte: Monte): { monteDeitado: Monte | null, monte
       lado: "motorista",
       alocado: false,
       especial: monte.especial,
+      sequencia: monte.sequencia,
     };
   }  
   if (pecasEmPe.length > 0) {
@@ -1484,6 +1493,7 @@ function separarPecasDeitadas(monte: Monte): { monteDeitado: Monte | null, monte
       lado: "motorista",
       alocado: false,
       especial: monte.especial,
+      sequencia: monte.sequencia,
     };
   }  
   return { monteDeitado, monteEmPe };
@@ -2280,8 +2290,8 @@ export function distribuirProdutos(
   const totalInicial = produtos.reduce((total, p) => total + p.quantidade, 0);
   console.log(`🔍 [INICIO] ${produtos.length} tipos de produtos, ${totalInicial} unidades totais`);
   
-  const produtosAgrupadosPorCliente = agruparProdutosPorCliente(produtos);  
-  produtosAgrupadosPorCliente.reverse();  
+  const produtosAgrupadosPorSequencia = agruparProdutosPorCliente(produtos);  
+  produtosAgrupadosPorSequencia.reverse();  
   const compartimentos = JSON.parse(JSON.stringify([
     {
       id: "cavalete_1",
@@ -2360,31 +2370,31 @@ export function distribuirProdutos(
   ])) as Compartimento[];  
   const montesAlocados: Monte[] = [];
   const montesNaoAlocados: Monte[] = [];  
-  for (let i = 0; i < produtosAgrupadosPorCliente.length; i++) {
-    const clienteUnico = produtosAgrupadosPorCliente[i];
+  for (let i = 0; i < produtosAgrupadosPorSequencia.length; i++) {
+    const sequenciaUnica = produtosAgrupadosPorSequencia[i];
     
-    console.log(`\n📦 [CLIENTE] ${clienteUnico.idCliente}`);
-    console.log(`   Produtos originais: ${clienteUnico.produtos.length} tipos`);
-    const totalProdutosCliente = clienteUnico.produtos.reduce((total, p) => total + p.quantidade, 0);
-    console.log(`   Total unidades: ${totalProdutosCliente}`);
+    console.log(`\n📦 [SEQUÊNCIA] ${sequenciaUnica.idCliente}`);
+    console.log(`   Produtos originais: ${sequenciaUnica.produtos.length} tipos`);
+    const totalProdutosSequencia = sequenciaUnica.produtos.reduce((total: number, p: ProdutoFormatado) => total + p.quantidade, 0);
+    console.log(`   Total unidades: ${totalProdutosSequencia}`);
     
-    const montesDeUmCliente = gerarMontes(clienteUnico.produtos);
+    const montesDeUmaSequencia = gerarMontes(sequenciaUnica.produtos);
     
-    const totalProdutosNosMontes = montesDeUmCliente.reduce((total, monte) => total + monte.produtos.length, 0);
-    console.log(`   Após gerarMontes: ${montesDeUmCliente.length} montes, ${totalProdutosNosMontes} produtos`);
+    const totalProdutosNosMontes = montesDeUmaSequencia.reduce((total: number, monte: Monte) => total + monte.produtos.length, 0);
+    console.log(`   Após gerarMontes: ${montesDeUmaSequencia.length} montes, ${totalProdutosNosMontes} produtos`);
     
-    if (totalProdutosNosMontes !== totalProdutosCliente) {
-      console.error(`❌ ERRO: Cliente ${clienteUnico.idCliente} - Produtos: ${totalProdutosCliente} → ${totalProdutosNosMontes} (diferença: ${totalProdutosNosMontes - totalProdutosCliente})`);
+    if (totalProdutosNosMontes !== totalProdutosSequencia) {
+      console.error(`❌ ERRO: Sequência ${sequenciaUnica.idCliente} - Produtos: ${totalProdutosSequencia} → ${totalProdutosNosMontes} (diferença: ${totalProdutosNosMontes - totalProdutosSequencia})`);
     }
     
     
     // PRIMEIRA REGRA: Tentar alocar montes em pé em um único cavalete
-    const resultadoMontesEmPe = tentarAlocarMontesEmPeEmUnicoCavalete(montesDeUmCliente, compartimentos);
+    const resultadoMontesEmPe = tentarAlocarMontesEmPeEmUnicoCavalete(montesDeUmaSequencia, compartimentos);
     
-    console.log(`   🎯 REGRA 1: ${resultadoMontesEmPe.montesAlocados.length} alocados (${resultadoMontesEmPe.montesAlocados.reduce((t, m) => t + m.produtos.length, 0)} produtos), ${resultadoMontesEmPe.montesNaoAlocados.length} não alocados (${resultadoMontesEmPe.montesNaoAlocados.reduce((t, m) => t + m.produtos.length, 0)} produtos)`);
+    console.log(`   🎯 REGRA 1: ${resultadoMontesEmPe.montesAlocados.length} alocados (${resultadoMontesEmPe.montesAlocados.reduce((t: number, m: Monte) => t + m.produtos.length, 0)} produtos), ${resultadoMontesEmPe.montesNaoAlocados.length} não alocados (${resultadoMontesEmPe.montesNaoAlocados.reduce((t: number, m: Monte) => t + m.produtos.length, 0)} produtos)`);
     
     // SEGUNDA REGRA: Tentar alocar com preferências (apenas para montes não alocados pela primeira regra)
-    const resultadoAlocacao = tentarAlocarComPreferencias(resultadoMontesEmPe.montesNaoAlocados, compartimentos, clienteUnico.idCliente);
+    const resultadoAlocacao = tentarAlocarComPreferencias(resultadoMontesEmPe.montesNaoAlocados, compartimentos, sequenciaUnica.idCliente);
     
     console.log(`   🎯 REGRA 2: ${resultadoAlocacao.montesAlocados.length} alocados (${resultadoAlocacao.montesAlocados.reduce((t, m) => t + m.produtos.length, 0)} produtos), ${resultadoAlocacao.montesNaoAlocados.length} não alocados (${resultadoAlocacao.montesNaoAlocados.reduce((t, m) => t + m.produtos.length, 0)} produtos)`);
     

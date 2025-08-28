@@ -53,6 +53,7 @@ export interface Monte {
   monteBase?: Monte;
   alocado?: boolean;
   naoPodeSerSobreposto?: boolean;
+  sequencia: number;
 }
 
 export interface CsvProduto {
