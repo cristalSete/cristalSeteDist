@@ -33,7 +33,11 @@ export function tentarAlocarComPreferencias(
 ): { montesAlocados: Monte[], montesNaoAlocados: Monte[] } {
   const preferencias = clientesEspeciais[parseInt(idCliente)];
   
+  console.log(`🔍 [PREFERÊNCIAS] Cliente ${idCliente} - Preferências:`, preferencias);
+  console.log(`🔍 [PREFERÊNCIAS] Compartimentos recebidos: ${compartimentos.map(c => c.id).join(', ')}`);
+  
   if (!preferencias) {
+    console.log(`🔍 [PREFERÊNCIAS] Cliente ${idCliente} não tem preferências - retornando todos os montes`);
     return { montesAlocados: [], montesNaoAlocados: [...montesDeUmCliente] };
   }
 
@@ -82,7 +86,68 @@ export function tentarAlocarComPreferencias(
         // Tentar alocar no lado da frente se especificado
         if (preferencias.posicaoCavalete === "FRENTE" || !preferencias.posicaoCavalete) {
           if (compartimento.lados.frente && podeAtenderPreferenciaDeLado(compartimento, compartimento.lados.frente, monte, ladoPreferido)) {
+            // VALIDAÇÃO DE LIMITES: Verificar se adicionar este monte não excede o limite de produtos
+            const orientacaoMonte = monte.especial ? "deitado" : "emPe"; // Aproximação baseada na regra
+            const limiteMaximo = compartimento.id === "cavalete_3" ? 
+              (orientacaoMonte === "deitado" ? 60 : 32) : 32; // Simplificado para frente/trás
+            const produtosAtuais = compartimento.lados.frente.montes.reduce((total, m) => 
+              total + (m.produtos?.length || 0), 0);
+            const totalComNovoMonte = produtosAtuais + monte.produtos.length;
+            
+            if (totalComNovoMonte <= limiteMaximo) {
+              const ladoReal = calcularLadoReal(compartimento, monte, compartimento.lados.frente.larguraOcupada);
+              
+              monte.lado = ladoReal;
+              monte.alocado = true;
+              compartimento.lados.frente.montes.push(monte);
+              compartimento.lados.frente.larguraOcupada += monte.largura;
+              compartimento.lados.frente.larguraRestante -= monte.largura;
+              compartimento.pesoTotal += monte.peso;
+              montesAlocados.push(monte);
+              alocado = true;
+              break;
+            }
+          }
+        }
+        
+        // Tentar alocar no lado de trás se especificado
+        if (preferencias.posicaoCavalete === "ATRAS" && compartimento.lados.tras) {
+          if (podeAtenderPreferenciaDeLado(compartimento, compartimento.lados.tras, monte, ladoPreferido)) {
+            // VALIDAÇÃO DE LIMITES: Verificar se adicionar este monte não excede o limite de produtos
+            const orientacaoMonte = monte.especial ? "deitado" : "emPe"; // Aproximação baseada na regra
+            const limiteMaximo = compartimento.id === "cavalete_3" ? 
+              (orientacaoMonte === "deitado" ? 60 : 32) : 32; // Simplificado para frente/trás
+            const produtosAtuais = compartimento.lados.tras.montes.reduce((total, m) => 
+              total + (m.produtos?.length || 0), 0);
+            const totalComNovoMonte = produtosAtuais + monte.produtos.length;
+            
+            if (totalComNovoMonte <= limiteMaximo) {
+              const ladoReal = calcularLadoReal(compartimento, monte, compartimento.lados.tras.larguraOcupada);
+              
+              monte.lado = ladoReal;
+              monte.alocado = true;
+              compartimento.lados.tras.montes.push(monte);
+              compartimento.lados.tras.larguraOcupada += monte.largura;
+              compartimento.lados.tras.larguraRestante -= monte.largura;
+              compartimento.pesoTotal += monte.peso;
+              montesAlocados.push(monte);
+              alocado = true;
+              break;
+            }
+          }
+        }
+      } else {
 
+        if (compartimento.lados.frente && compartimento.lados.frente.larguraRestante >= monte.largura) {
+          // VALIDAÇÃO DE LIMITES: Verificar se adicionar este monte não excede o limite de produtos
+          const orientacaoMonte = monte.especial ? "deitado" : "emPe"; // Aproximação baseada na regra
+          const limiteMaximo = compartimento.id === "cavalete_3" ? 
+            (orientacaoMonte === "deitado" ? 60 : 32) : 32; // Simplificado para frente/trás
+          const produtosAtuais = compartimento.lados.frente.montes.reduce((total, m) => 
+            total + (m.produtos?.length || 0), 0);
+          const totalComNovoMonte = produtosAtuais + monte.produtos.length;
+          
+          if (totalComNovoMonte <= limiteMaximo) {
             const ladoReal = calcularLadoReal(compartimento, monte, compartimento.lados.frente.larguraOcupada);
             
             monte.lado = ladoReal;
@@ -95,39 +160,6 @@ export function tentarAlocarComPreferencias(
             alocado = true;
             break;
           }
-        }
-        
-        // Tentar alocar no lado de trás se especificado
-        if (preferencias.posicaoCavalete === "ATRAS" && compartimento.lados.tras) {
-          if (podeAtenderPreferenciaDeLado(compartimento, compartimento.lados.tras, monte, ladoPreferido)) {
-
-            const ladoReal = calcularLadoReal(compartimento, monte, compartimento.lados.tras.larguraOcupada);
-            
-            monte.lado = ladoReal;
-            monte.alocado = true;
-            compartimento.lados.tras.montes.push(monte);
-            compartimento.lados.tras.larguraOcupada += monte.largura;
-            compartimento.lados.tras.larguraRestante -= monte.largura;
-            compartimento.pesoTotal += monte.peso;
-            montesAlocados.push(monte);
-            alocado = true;
-            break;
-          }
-        }
-      } else {
-
-        if (compartimento.lados.frente && compartimento.lados.frente.larguraRestante >= monte.largura) {
-          const ladoReal = calcularLadoReal(compartimento, monte, compartimento.lados.frente.larguraOcupada);
-          
-          monte.lado = ladoReal;
-          monte.alocado = true;
-          compartimento.lados.frente.montes.push(monte);
-          compartimento.lados.frente.larguraOcupada += monte.largura;
-          compartimento.lados.frente.larguraRestante -= monte.largura;
-          compartimento.pesoTotal += monte.peso;
-          montesAlocados.push(monte);
-          alocado = true;
-          break;
         }
       }
     }

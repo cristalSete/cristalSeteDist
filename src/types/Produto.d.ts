@@ -54,6 +54,7 @@ export interface Monte {
   alocado?: boolean;
   naoPodeSerSobreposto?: boolean;
   sequencia: number;
+  sobreposicaoMultipla?: boolean; // Identifica se este monte foi criado via sobreposição múltipla
 }
 
 export interface CsvProduto {
